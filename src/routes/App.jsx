@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   Eye,
@@ -25,6 +25,19 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function formatDate(value) {
+  if (!value) {
+    return "";
+  }
+
+  const [year, month, day] = value.slice(0, 10).split("-");
+  if (!year || !month || !day) {
+    return value;
+  }
+
+  return `${day}/${month}/${year.slice(-2)}`;
+}
+
 function StatCard({ label, value, onClick, active }) {
   if (onClick) {
     return (
@@ -44,6 +57,38 @@ function StatCard({ label, value, onClick, active }) {
       <span>{label}</span>
       <strong>{value ?? 0}</strong>
     </article>
+  );
+}
+
+function DateField({ value, onChange, max, id }) {
+  const inputRef = useRef(null);
+
+  function openPicker() {
+    if (inputRef.current?.showPicker) {
+      inputRef.current.showPicker();
+      return;
+    }
+
+    inputRef.current?.click();
+  }
+
+  return (
+    <div className="date-field">
+      <button className="date-display" type="button" onClick={openPicker}>
+        <CalendarDays size={16} aria-hidden="true" />
+        <span>{formatDate(value) || "dd/mm/yy"}</span>
+      </button>
+      <input
+        id={id}
+        ref={inputRef}
+        className="native-date-input"
+        type="date"
+        value={value}
+        max={max}
+        onChange={(event) => onChange(event.target.value)}
+        tabIndex={-1}
+      />
+    </div>
   );
 }
 
@@ -76,6 +121,19 @@ function CurrentUsersTable({ title, users, loading }) {
   );
 }
 
+function filterUsers(users, searchTerm) {
+  const term = searchTerm.trim().toLowerCase();
+  if (!term) {
+    return users;
+  }
+
+  return users.filter(
+    (user) =>
+      user.username.toLowerCase().includes(term) ||
+      (user.category || "").toLowerCase().includes(term),
+  );
+}
+
 function DeletedUsersTable({ users }) {
   if (!users?.length) {
     return <div className="empty-state">No deleted users for this date.</div>;
@@ -96,8 +154,8 @@ function DeletedUsersTable({ users }) {
           <tr key={`${user.username}-${user.deleted_date}`}>
             <td>{user.username}</td>
             <td>{user.category || "Unclassified"}</td>
-            <td>{user.deleted_date}</td>
-            <td>{user.last_seen_date}</td>
+            <td>{formatDate(user.deleted_date)}</td>
+            <td>{formatDate(user.last_seen_date)}</td>
           </tr>
         ))}
       </tbody>
@@ -116,17 +174,19 @@ function TrendList({ rows }) {
   }
 
   return (
-    <ul className="trend-list">
-      {rows.map((row) => (
-        <li className="trend-item" key={row.date}>
-          <span>{row.date}</span>
-          <strong>{row.count}</strong>
-          <div className="bar" aria-hidden="true">
-            <span style={{ width: `${(row.count / maxCount) * 100}%` }} />
-          </div>
-        </li>
-      ))}
-    </ul>
+    <div className="trend-scroll">
+      <ul className="trend-list">
+        {rows.map((row) => (
+          <li className="trend-item" key={row.date}>
+            <span>{formatDate(row.date)}</span>
+            <strong>{row.count}</strong>
+            <div className="bar" aria-hidden="true">
+              <span style={{ width: `${(row.count / maxCount) * 100}%` }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -140,7 +200,7 @@ function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
       {uploads.map((upload) => (
         <li className="upload-history-item" key={upload.id}>
           <div>
-            <strong>{upload.upload_date}</strong>
+            <strong>{formatDate(upload.upload_date)}</strong>
             <span title={upload.file_name}>{upload.file_name}</span>
           </div>
           <dl>
@@ -180,6 +240,7 @@ function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
 
 function App() {
   const [selectedDate, setSelectedDate] = useState(today());
+  const [statsDate, setStatsDate] = useState("");
   const [dashboard, setDashboard] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploadDate, setUploadDate] = useState(today());
@@ -193,6 +254,7 @@ function App() {
   });
   const [usersLoading, setUsersLoading] = useState(false);
   const [isUserListOpen, setIsUserListOpen] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
   const [uploadHistory, setUploadHistory] = useState([]);
   const [isUploadHistoryOpen, setIsUploadHistoryOpen] = useState(false);
   const [deletingUploadId, setDeletingUploadId] = useState(null);
@@ -201,14 +263,17 @@ function App() {
     setLoading(true);
     setMessage(null);
     try {
-      const data = await getDashboard(selectedDate);
+      const data = await getDashboard(selectedDate, statsDate);
+      if (!statsDate && data.latest_upload?.upload_date) {
+        setStatsDate(data.latest_upload.upload_date);
+      }
       setDashboard(data);
     } catch (error) {
       setMessage({ type: "error", text: error.message });
     } finally {
       setLoading(false);
     }
-  }, [selectedDate]);
+  }, [selectedDate, statsDate]);
 
   const loadUploadHistory = useCallback(async () => {
     try {
@@ -233,15 +298,16 @@ function App() {
     setUsersLoading(true);
     setMessage(null);
     try {
-      const data = await getCurrentUsers(category);
+      const data = await getCurrentUsers(category, statsDate);
       setUserList({ title, category, users: data.users ?? [] });
+      setUserSearch("");
       setIsUserListOpen(true);
     } catch (error) {
       setMessage({ type: "error", text: error.message });
     } finally {
       setUsersLoading(false);
     }
-  }, []);
+  }, [statsDate]);
 
   async function handleUpload(event) {
     event.preventDefault();
@@ -271,7 +337,7 @@ function App() {
 
   async function handleDeleteUpload(upload) {
     const confirmed = window.confirm(
-      `Delete the latest upload from ${upload.upload_date}? This will remove its users, deleted-user results, and uploaded file.`,
+      `Delete the latest upload from ${formatDate(upload.upload_date)}? This will remove its users, deleted-user results, and uploaded file.`,
     );
 
     if (!confirmed) {
@@ -295,8 +361,18 @@ function App() {
     }
   }
 
+  function resetDeletedUsersDate() {
+    setSelectedDate(latestUpload?.upload_date ?? today());
+  }
+
+  function resetDashboardDate() {
+    setStatsDate(latestUpload?.upload_date ?? today());
+  }
+
   const summary = dashboard?.summary ?? {};
   const latestUpload = dashboard?.latest_upload;
+  const selectedUpload = dashboard?.selected_upload;
+  const filteredUserList = filterUsers(userList.users, userSearch);
 
   return (
     <div className="app-shell">
@@ -311,10 +387,6 @@ function App() {
               <p>Daily SAP access monitoring</p>
             </div>
           </div>
-          <div className="api-status">
-            <span className="status-dot" />
-            Backend connected
-          </div>
         </div>
       </header>
 
@@ -325,20 +397,27 @@ function App() {
               <div>
                 <h2>Dashboard</h2>
                 <p>
-                  {latestUpload
-                    ? `Latest upload: ${latestUpload.upload_date}`
+                  {selectedUpload
+                    ? `Showing records for: ${formatDate(selectedUpload.upload_date)}`
                     : "Upload your first SAP export to populate the dashboard."}
                 </p>
               </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={loadDashboard}
-                disabled={loading}
-                title="Refresh dashboard"
-              >
-                <RefreshCw size={18} aria-hidden="true" />
-              </button>
+              <div className="controls">
+                <DateField
+                  value={statsDate}
+                  onChange={setStatsDate}
+                  max={latestUpload?.upload_date ?? undefined}
+                />
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={resetDashboardDate}
+                  disabled={loading}
+                  title="Show latest dashboard records"
+                >
+                  <RefreshCw size={18} aria-hidden="true" />
+                </button>
+              </div>
             </div>
 
             <div className="stats-grid">
@@ -365,8 +444,8 @@ function App() {
                 }
               />
               <StatCard
-                label="Deleted On Selected Date"
-                value={summary.deleted_users_for_selected_date}
+                label="Deleted On Dashboard Date"
+                value={summary.deleted_users_for_stats_date}
               />
               <StatCard
                 label="Total Uploads"
@@ -383,13 +462,18 @@ function App() {
                 <p>Filter deleted users day by day.</p>
               </div>
               <div className="controls">
-                <CalendarDays size={18} aria-hidden="true" />
-                <input
-                  className="date-input"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
-                />
+                <strong className="list-count">
+                  {summary.deleted_users_for_selected_date ?? 0}
+                </strong>
+                <DateField value={selectedDate} onChange={setSelectedDate} />
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={resetDeletedUsersDate}
+                  title="Show latest deleted users"
+                >
+                  <RefreshCw size={18} aria-hidden="true" />
+                </button>
               </div>
             </div>
 
@@ -410,13 +494,7 @@ function App() {
             <form className="upload-form" onSubmit={handleUpload}>
               <div className="field">
                 <label htmlFor="upload-date">Upload date</label>
-                <input
-                  id="upload-date"
-                  className="date-input"
-                  type="date"
-                  value={uploadDate}
-                  onChange={(event) => setUploadDate(event.target.value)}
-                />
+                <DateField id="upload-date" value={uploadDate} onChange={setUploadDate} />
               </div>
 
               <div className="field">
@@ -482,7 +560,7 @@ function App() {
                 <p>Current users from the latest upload.</p>
               </div>
               <div className="modal-actions">
-                <strong className="list-count">{userList.users.length}</strong>
+                <strong className="list-count">{filteredUserList.length}</strong>
                 <button
                   className="icon-button close-button"
                   type="button"
@@ -493,10 +571,19 @@ function App() {
                 </button>
               </div>
             </div>
+            <div className="search-row">
+              <input
+                className="search-input"
+                type="search"
+                placeholder="Search user"
+                value={userSearch}
+                onChange={(event) => setUserSearch(event.target.value)}
+              />
+            </div>
             <div className="scroll-panel modal-scroll">
               <CurrentUsersTable
                 title={userList.title}
-                users={userList.users}
+                users={filteredUserList}
                 loading={usersLoading}
               />
             </div>

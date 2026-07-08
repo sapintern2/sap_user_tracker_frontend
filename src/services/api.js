@@ -18,9 +18,16 @@ async function request(path, options = {}) {
   return response.json();
 }
 
-export function getDashboard(deletedDate) {
-  const params = deletedDate ? `?deleted_date=${deletedDate}` : "";
-  return request(`/dashboard${params}`);
+export function getDashboard(deletedDate, statsDate) {
+  const params = new URLSearchParams();
+  if (deletedDate) {
+    params.set("deleted_date", deletedDate);
+  }
+  if (statsDate) {
+    params.set("stats_date", statsDate);
+  }
+  const query = params.toString();
+  return request(`/dashboard${query ? `?${query}` : ""}`);
 }
 
 export function getDeletedUsers(deletedDate) {
@@ -28,9 +35,16 @@ export function getDeletedUsers(deletedDate) {
   return request(`/deleted-users${params}`);
 }
 
-export function getCurrentUsers(category) {
-  const params = category ? `?category=${category}` : "";
-  return request(`/dashboard/users${params}`);
+export function getCurrentUsers(category, statsDate) {
+  const params = new URLSearchParams();
+  if (category) {
+    params.set("category", category);
+  }
+  if (statsDate) {
+    params.set("stats_date", statsDate);
+  }
+  const query = params.toString();
+  return request(`/dashboard/users${query ? `?${query}` : ""}`);
 }
 
 export function getUploadHistory() {
