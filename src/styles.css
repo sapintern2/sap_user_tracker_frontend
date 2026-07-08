@@ -413,6 +413,48 @@ button {
   text-decoration: none;
 }
 
+.report-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #176b5d;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.upload-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #a7353f;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .upload-history-item strong,
 .upload-history-item span {
   display: block;

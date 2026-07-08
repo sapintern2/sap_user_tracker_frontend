@@ -4,7 +4,9 @@ import {
   Eye,
   X,
   Database,
+  FileSpreadsheet,
   RefreshCw,
+  Trash2,
   Upload,
   Users,
 } from "lucide-react";
@@ -12,8 +14,10 @@ import {
 import {
   getCurrentUsers,
   getDashboard,
+  getMasterReportUrl,
   getUploadHistory,
   getUploadDownloadUrl,
+  deleteUpload,
   uploadExcel,
 } from "../services/api";
 
@@ -126,7 +130,7 @@ function TrendList({ rows }) {
   );
 }
 
-function UploadHistoryList({ uploads }) {
+function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
   if (!uploads?.length) {
     return <div className="empty-state compact">No uploads yet.</div>;
   }
@@ -149,9 +153,25 @@ function UploadHistoryList({ uploads }) {
               <dd>{upload.deleted_users}</dd>
             </div>
           </dl>
-          <a className="download-link" href={getUploadDownloadUrl(upload.id)}>
-            Download
-          </a>
+          <div className="upload-actions">
+            <a className="download-link" href={getUploadDownloadUrl(upload.id)}>
+              Download
+            </a>
+            <button
+              className="danger-button"
+              type="button"
+              onClick={() => onDeleteUpload(upload)}
+              disabled={!upload.is_latest || deletingUploadId === upload.id}
+              title={
+                upload.is_latest
+                  ? "Delete this latest upload and revert"
+                  : "Only the latest upload can be deleted"
+              }
+            >
+              <Trash2 size={15} aria-hidden="true" />
+              {deletingUploadId === upload.id ? "Deleting" : "Delete"}
+            </button>
+          </div>
         </li>
       ))}
     </ul>
@@ -175,6 +195,7 @@ function App() {
   const [isUserListOpen, setIsUserListOpen] = useState(false);
   const [uploadHistory, setUploadHistory] = useState([]);
   const [isUploadHistoryOpen, setIsUploadHistoryOpen] = useState(false);
+  const [deletingUploadId, setDeletingUploadId] = useState(null);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -245,6 +266,32 @@ function App() {
       setMessage({ type: "error", text: error.message });
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleDeleteUpload(upload) {
+    const confirmed = window.confirm(
+      `Delete the latest upload from ${upload.upload_date}? This will remove its users, deleted-user results, and uploaded file.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingUploadId(upload.id);
+    setMessage(null);
+    try {
+      await deleteUpload(upload.id);
+      setMessage({
+        type: "success",
+        text: "Latest upload deleted. Data has been reverted to the previous upload.",
+      });
+      await loadDashboard();
+      await loadUploadHistory();
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally {
+      setDeletingUploadId(null);
     }
   }
 
@@ -404,6 +451,20 @@ function App() {
             </div>
             <TrendList rows={dashboard?.deleted_user_trend ?? []} />
           </section>
+
+          <section className="panel section">
+            <div className="section-heading">
+              <div>
+                <h2>Reports</h2>
+                <p>Master audit workbook.</p>
+              </div>
+              <FileSpreadsheet size={20} aria-hidden="true" />
+            </div>
+            <a className="report-download" href={getMasterReportUrl()}>
+              <FileSpreadsheet size={18} aria-hidden="true" />
+              Download Master Report
+            </a>
+          </section>
         </aside>
       </main>
 
@@ -468,7 +529,11 @@ function App() {
                 </button>
               </div>
             </div>
-            <UploadHistoryList uploads={uploadHistory} />
+            <UploadHistoryList
+              uploads={uploadHistory}
+              onDeleteUpload={handleDeleteUpload}
+              deletingUploadId={deletingUploadId}
+            />
           </section>
         </div>
       ) : null}
