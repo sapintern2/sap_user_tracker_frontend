@@ -41,6 +41,16 @@ export function getUploadDownloadUrl(uploadId) {
   return `${API_BASE_URL}/history/uploads/${uploadId}/download`;
 }
 
+export function getMasterReportUrl() {
+  return `${API_BASE_URL}/reports/master/download`;
+}
+
+export function deleteUpload(uploadId) {
+  return request(`/history/uploads/${uploadId}`, {
+    method: "DELETE",
+  });
+}
+
 export function uploadExcel(file, uploadDate) {
   const formData = new FormData();
   formData.append("file", file);
