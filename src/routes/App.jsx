@@ -200,8 +200,13 @@ function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
       {uploads.map((upload) => (
         <li className="upload-history-item" key={upload.id}>
           <div>
-            <strong>{formatDate(upload.upload_date)}</strong>
-            <span title={upload.file_name}>{upload.file_name}</span>
+            <div className="upload-title-row">
+              <strong>{formatDate(upload.upload_date)}</strong>
+              {upload.is_latest ? <span className="latest-pill">Latest</span> : null}
+            </div>
+            <span className="upload-file-name" title={upload.file_name}>
+              {upload.file_name}
+            </span>
           </div>
           <dl>
             <div>
@@ -214,11 +219,11 @@ function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
             </div>
           </dl>
           <div className="upload-actions">
-            <a className="download-link" href={getUploadDownloadUrl(upload.id)}>
+            <a className="download-link compact-action" href={getUploadDownloadUrl(upload.id)}>
               Download
             </a>
             <button
-              className="danger-button"
+              className="danger-button compact-action"
               type="button"
               onClick={() => onDeleteUpload(upload)}
               disabled={!upload.is_latest || deletingUploadId === upload.id}
@@ -499,9 +504,14 @@ function App() {
 
               <div className="field">
                 <label htmlFor="sap-file">SAP export</label>
+                <label className="file-drop" htmlFor="sap-file">
+                  <FileSpreadsheet size={22} aria-hidden="true" />
+                  <span>{selectedFile ? selectedFile.name : "Choose Excel file"}</span>
+                  <small>.xlsx or .xls</small>
+                </label>
                 <input
                   id="sap-file"
-                  className="file-input"
+                  className="file-input-hidden"
                   type="file"
                   accept=".xlsx,.xls"
                   onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
