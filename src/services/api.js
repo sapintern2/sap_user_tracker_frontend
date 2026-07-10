@@ -47,6 +47,21 @@ export function getCurrentUsers(category, statsDate) {
   return request(`/dashboard/users${query ? `?${query}` : ""}`);
 }
 
+export function getClassificationMovements(fromCategory, toCategory, statsDate) {
+  const params = new URLSearchParams();
+  if (fromCategory) {
+    params.set("from_category", fromCategory);
+  }
+  if (toCategory) {
+    params.set("to_category", toCategory);
+  }
+  if (statsDate) {
+    params.set("stats_date", statsDate);
+  }
+  const query = params.toString();
+  return request(`/dashboard/movements${query ? `?${query}` : ""}`);
+}
+
 export function getUploadHistory() {
   return request("/history/uploads");
 }
