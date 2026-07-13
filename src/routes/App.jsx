@@ -11,17 +11,29 @@ import {
   Sun,
   Trash2,
   Upload,
+  UserCircle,
   Users,
 } from "lucide-react";
 
 import {
+  changePassword,
+  clearSession,
+  blockAdminUser,
+  createAdminUser,
   getCurrentUsers,
   getClassificationMovements,
   getDashboard,
-  getMasterReportUrl,
+  getMe,
+  getStoredToken,
+  getStoredUser,
   getUploadHistory,
-  getUploadDownloadUrl,
   deleteUpload,
+  downloadMasterReport,
+  downloadUpload,
+  login,
+  resetAdminUserPassword,
+  storeSession,
+  unblockAdminUser,
   uploadExcel,
 } from "../services/api";
 
@@ -313,7 +325,7 @@ function TrendList({ rows }) {
   );
 }
 
-function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
+function UploadHistoryList({ uploads, onDeleteUpload, onDownloadUpload, deletingUploadId }) {
   if (!uploads?.length) {
     return <div className="empty-state compact">No uploads yet.</div>;
   }
@@ -342,9 +354,13 @@ function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
             </div>
           </dl>
           <div className="upload-actions">
-            <a className="download-link compact-action" href={getUploadDownloadUrl(upload.id)}>
+            <button
+              className="download-link compact-action"
+              type="button"
+              onClick={() => onDownloadUpload(upload)}
+            >
               Download
-            </a>
+            </button>
             <button
               className="danger-button compact-action"
               type="button"
@@ -363,6 +379,293 @@ function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function LoginScreen({ onLogin, loading, message }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onLogin(email, password);
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <div className="auth-mark">
+          <Database size={24} aria-hidden="true" />
+        </div>
+        <h1>SAP User Tracker</h1>
+        <p>Sign in with your allowed company email.</p>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="email"
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
+          <button className="primary-button" type="submit" disabled={loading}>
+            <Lock size={17} aria-hidden="true" />
+            {loading ? "Signing in" : "Sign In"}
+          </button>
+        </form>
+        {message ? <div className={`message ${message.type}`}>{message.text}</div> : null}
+      </section>
+    </main>
+  );
+}
+
+function PasswordChangeScreen({ user, onChangePassword, onLogout, loading, message }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onChangePassword(newPassword, confirmPassword);
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <div className="auth-mark">
+          <Lock size={24} aria-hidden="true" />
+        </div>
+        <h1>Change Password</h1>
+        <p>{user.name}, update your default password before opening the dashboard.</p>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            New password
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              required
+            />
+          </label>
+          <label>
+            Confirm new password
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              required
+            />
+          </label>
+          <button className="primary-button" type="submit" disabled={loading}>
+            {loading ? "Updating" : "Update Password"}
+          </button>
+        </form>
+        <button className="secondary-button auth-secondary" type="button" onClick={onLogout}>
+          Use another account
+        </button>
+        {message ? <div className={`message ${message.type}`}>{message.text}</div> : null}
+      </section>
+    </main>
+  );
+}
+
+function AdminPanel({
+  users,
+  loginEvents,
+  currentUser,
+  loading,
+  actionUserId,
+  message,
+  activeTab,
+  onTabChange,
+  onClose,
+  onAddUser,
+  onBlockUser,
+  onUnblockUser,
+  onResetPassword,
+  loginDate,
+  onLoginDateChange,
+  onResetLoginDate,
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onAddUser(name, email, () => {
+      setName("");
+      setEmail("");
+    });
+  }
+
+  return (
+    <div className="modal-backdrop admin-backdrop" role="presentation">
+      <section className="modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+        <div className="modal-header">
+          <div>
+            <h2 id="admin-title">Admin Panel</h2>
+            <p>Manage allowed users, access status, and login activity.</p>
+          </div>
+          <div className="modal-actions">
+            <button className="icon-button close-button" type="button" onClick={onClose} title="Close">
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div className="admin-tabs">
+          <button
+            className={activeTab === "users" ? "active" : ""}
+            type="button"
+            onClick={() => onTabChange("users")}
+          >
+            Users
+          </button>
+          <button
+            className={activeTab === "logins" ? "active" : ""}
+            type="button"
+            onClick={() => onTabChange("logins")}
+          >
+            Login Activity
+          </button>
+        </div>
+
+        {message ? <div className={`message ${message.type}`}>{message.text}</div> : null}
+
+        {activeTab === "users" ? (
+          <>
+            <form className="admin-add-form" onSubmit={handleSubmit}>
+              <input
+                type="text"
+                placeholder="Name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+              <button className="primary-button" type="submit" disabled={loading}>
+                Add User
+              </button>
+            </form>
+            <div className="scroll-panel admin-scroll">
+              <table className="deleted-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>First Login</th>
+                    <th>Last Login</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.id}>
+                      <td>{user.name}</td>
+                      <td>{user.email}</td>
+                      <td>{user.role}</td>
+                      <td>{user.is_active ? "Active" : "Blocked"}</td>
+                      <td>{user.must_change_password ? "Pending" : "Done"}</td>
+                      <td>{formatDate(user.last_login_at) || "-"}</td>
+                      <td>
+                        <div className="admin-row-actions">
+                          {user.is_active ? (
+                            <button
+                              className="danger-button compact-action"
+                              type="button"
+                              onClick={() => onBlockUser(user)}
+                              disabled={user.id === currentUser.id || actionUserId === user.id}
+                            >
+                              Block
+                            </button>
+                          ) : (
+                            <button
+                              className="secondary-button compact-action"
+                              type="button"
+                              onClick={() => onUnblockUser(user)}
+                              disabled={actionUserId === user.id}
+                            >
+                              Unblock
+                            </button>
+                          )}
+                          <button
+                            className="secondary-button compact-action"
+                            type="button"
+                            onClick={() => onResetPassword(user)}
+                            disabled={actionUserId === user.id}
+                          >
+                            Reset
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="admin-filter-row">
+              <DateField value={loginDate} onChange={onLoginDateChange} max={today()} />
+              <button
+                className="icon-button"
+                type="button"
+                onClick={onResetLoginDate}
+                title="Show today's login activity"
+              >
+                <RefreshCw size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="scroll-panel admin-scroll">
+              <table className="deleted-table">
+                <thead>
+                  <tr>
+                    <th>Logged Time</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loginEvents.map((event) => (
+                    <tr key={event.id}>
+                      <td>{formatDateTime(event.created_at)}</td>
+                      <td>{event.name || "-"}</td>
+                      <td>{event.email}</td>
+                      <td>{event.success ? "Success" : "Failed"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -431,6 +734,31 @@ function App() {
   }, [loadUploadHistory]);
 
   useEffect(() => {
+    if (!getStoredToken()) {
+      setAuthLoading(false);
+      return;
+    }
+
+    async function loadSession() {
+      try {
+        const data = await getMe();
+        setCurrentUser(data.user);
+      } catch {
+        clearSession();
+        setCurrentUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    loadSession();
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.must_change_password) {
+      return;
+    }
+
     loadDashboard();
     loadUploadHistory();
   }, [loadDashboard, loadUploadHistory]);
@@ -561,6 +889,24 @@ function App() {
       setMessage({ type: "error", text: error.message });
     } finally {
       setDeletingUploadId(null);
+    }
+  }
+
+  async function handleDownloadUpload(upload) {
+    setMessage(null);
+    try {
+      await downloadUpload(upload.id);
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    }
+  }
+
+  async function handleDownloadMasterReport() {
+    setMessage(null);
+    try {
+      await downloadMasterReport();
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
     }
   }
 
@@ -807,7 +1153,7 @@ function App() {
                 />
               </div>
 
-              <button className="primary-button" type="submit" disabled={uploading}>
+            <button className="primary-button" type="submit" disabled={uploading}>
                 <Upload size={18} aria-hidden="true" />
                 {uploading ? "Uploading" : "Upload"}
               </button>
@@ -837,10 +1183,10 @@ function App() {
               </div>
               <FileSpreadsheet size={20} aria-hidden="true" />
             </div>
-            <a className="report-download" href={getMasterReportUrl()}>
+            <button className="report-download" type="button" onClick={handleDownloadMasterReport}>
               <FileSpreadsheet size={18} aria-hidden="true" />
               Download Master Report
-            </a>
+            </button>
           </section>
         </aside>
       </main>

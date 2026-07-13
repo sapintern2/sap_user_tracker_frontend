@@ -87,6 +87,12 @@ button {
   padding: 18px 0;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -140,6 +146,157 @@ button {
   border-color: rgba(15, 94, 120, 0.42);
   background: var(--brand-soft);
   transform: translateY(-1px);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--brand);
+  background: var(--panel);
+  padding: 0;
+  box-shadow: var(--shadow);
+  transition:
+    border-color 180ms ease,
+    color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
+}
+
+.theme-toggle:hover {
+  border-color: rgba(15, 94, 120, 0.42);
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+}
+
+.profile-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--brand);
+  padding: 6px 6px 6px 10px;
+  box-shadow: var(--shadow);
+}
+
+.profile-menu div {
+  display: grid;
+  min-width: 0;
+}
+
+.profile-menu strong,
+.profile-menu span {
+  overflow: hidden;
+  max-width: 180px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-menu strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.profile-menu span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.logout-button {
+  width: 34px;
+  min-height: 34px;
+  background: #344b49;
+}
+
+.admin-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid #bfd3cf;
+  border-radius: 6px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(15, 94, 120, 0.11), transparent 28%),
+    radial-gradient(circle at 85% 8%, rgba(183, 121, 31, 0.08), transparent 24%),
+    linear-gradient(180deg, #fbfcfd 0%, #f3f6f8 46%, #edf2f5 100%);
+  padding: 24px;
+}
+
+.auth-card {
+  display: grid;
+  gap: 14px;
+  width: min(420px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.auth-mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--brand-strong), #177e96);
+}
+
+.auth-card h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+}
+
+.auth-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+  color: #50615c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-form input {
+  min-height: 42px;
+  border: 1px solid #bfd3cf;
+  border-radius: 6px;
+  background: var(--soft);
+  color: var(--ink);
+  padding: 8px 10px;
+}
+
+.auth-secondary {
+  width: 100%;
 }
 
 .main-grid {
@@ -686,6 +843,7 @@ button.matrix-cell.active {
   align-items: center;
   justify-content: center;
   min-height: 34px;
+  border: 0;
   border-radius: 6px;
   color: #ffffff;
   background: linear-gradient(135deg, var(--brand-strong), #157d98);
@@ -708,6 +866,7 @@ button.matrix-cell.active {
   gap: 8px;
   width: 100%;
   min-height: 42px;
+  border: 0;
   border-radius: 6px;
   color: #ffffff;
   background: linear-gradient(135deg, var(--brand-strong), #157d98);
@@ -896,6 +1055,33 @@ button.matrix-cell.active {
   .section-heading,
   .controls {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topbar-actions,
+  .profile-menu {
+    width: 100%;
+  }
+
+  .profile-menu {
+    justify-content: space-between;
+  }
+
+  .admin-add-form {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-filter-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-tabs,
+  .admin-tabs button {
+    width: 100%;
+  }
+
+  .admin-row-actions {
     flex-direction: column;
   }
 
