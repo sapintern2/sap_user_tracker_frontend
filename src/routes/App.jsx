@@ -6,7 +6,6 @@ import {
   X,
   Database,
   FileSpreadsheet,
-  Lock,
   Moon,
   RefreshCw,
   Sun,
@@ -53,14 +52,6 @@ function formatDate(value) {
   }
 
   return `${day}/${month}/${year.slice(-2)}`;
-}
-
-function formatDateTime(value) {
-  if (!value) {
-    return "-";
-  }
-
-  return new Date(value).toLocaleString();
 }
 
 const MOVEMENT_CARDS = [
@@ -176,6 +167,8 @@ function CurrentUsersTable({ title, users, loading }) {
       <thead>
         <tr>
           <th>User</th>
+          <th>ID</th>
+          <th>Name</th>
           <th>Target Classification</th>
         </tr>
       </thead>
@@ -183,11 +176,65 @@ function CurrentUsersTable({ title, users, loading }) {
         {users.map((user) => (
           <tr key={user.username}>
             <td>{user.username}</td>
+            <td>{user.user_id || "-"}</td>
+            <td>{user.full_name || "-"}</td>
             <td>{user.category || "Unclassified"}</td>
           </tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+function MovementUsersTable({ title, users, loading }) {
+  if (loading) {
+    return <div className="empty-state">Loading movements...</div>;
+  }
+
+  if (!users?.length) {
+    return <div className="empty-state">No users moved for {title}.</div>;
+  }
+
+  return (
+    <table className="deleted-table">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>ID</th>
+          <th>Name</th>
+          <th>From</th>
+          <th>To</th>
+          <th>Movement Date</th>
+          <th>Previous Upload</th>
+          <th>Current Upload</th>
+        </tr>
+      </thead>
+      <tbody>
+        {users.map((user) => (
+          <tr key={`${user.username}-${user.movement_date}-${user.from_category}-${user.to_category}`}>
+            <td>{user.username}</td>
+            <td>{user.user_id || "-"}</td>
+            <td>{user.full_name || "-"}</td>
+            <td>{user.from_category || "Unclassified"}</td>
+            <td>{user.to_category || "Unclassified"}</td>
+            <td>{formatDate(user.movement_date)}</td>
+            <td>{formatDate(user.previous_upload_date)}</td>
+            <td>{formatDate(user.current_upload_date)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function getCategoryLabel(category) {
+  return CATEGORY_OPTIONS.find((option) => option.value === category)?.label ?? category;
+}
+
+function getMovementConfig(fromCategory, toCategory) {
+  return MOVEMENT_CARDS.find(
+    (movement) =>
+      movement.fromCategory === fromCategory && movement.toCategory === toCategory,
   );
 }
 
@@ -200,6 +247,8 @@ function filterUsers(users, searchTerm) {
   return users.filter(
     (user) =>
       user.username.toLowerCase().includes(term) ||
+      (user.user_id || "").toLowerCase().includes(term) ||
+      (user.full_name || "").toLowerCase().includes(term) ||
       (user.category || "").toLowerCase().includes(term),
   );
 }
@@ -622,8 +671,6 @@ function AdminPanel({
 
 function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
-  const [authLoading, setAuthLoading] = useState(false);
-  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
   const [selectedDate, setSelectedDate] = useState(today());
   const [statsDate, setStatsDate] = useState("");
   const [dashboard, setDashboard] = useState(null);
@@ -640,7 +687,16 @@ function App() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [isUserListOpen, setIsUserListOpen] = useState(false);
   const [userSearch, setUserSearch] = useState("");
-  const [movementList] = useState({ users: [] });
+  const [movementList, setMovementList] = useState({
+    title: "Classification Movements",
+    fromCategory: null,
+    toCategory: null,
+    users: [],
+  });
+  const [movementsLoading, setMovementsLoading] = useState(false);
+  const [movementSearch, setMovementSearch] = useState("");
+  const [movementFrom, setMovementFrom] = useState("advanced_users");
+  const [movementTo, setMovementTo] = useState("core_users");
   const [uploadHistory, setUploadHistory] = useState([]);
   const [isUploadHistoryOpen, setIsUploadHistoryOpen] = useState(false);
   const [uploadPendingDelete, setUploadPendingDelete] = useState(null);
@@ -653,6 +709,7 @@ function App() {
       const data = await getDashboard(selectedDate, statsDate);
       if (!statsDate && data.latest_upload?.upload_date) {
         setStatsDate(data.latest_upload.upload_date);
+        setSelectedDate(data.latest_upload.upload_date);
       }
       setDashboard(data);
     } catch (error) {
@@ -735,6 +792,61 @@ function App() {
     }
   }, [statsDate]);
 
+  const loadMovements = useCallback(async (movement) => {
+    setMovementsLoading(true);
+    setMessage(null);
+    try {
+      const data = await getClassificationMovements(
+        movement.fromCategory,
+        movement.toCategory,
+        statsDate,
+      );
+      setMovementList({
+        title: movement.label,
+        fromCategory: movement.fromCategory,
+        toCategory: movement.toCategory,
+        users: data.users ?? [],
+      });
+      setMovementSearch("");
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally {
+      setMovementsLoading(false);
+    }
+  }, [statsDate]);
+
+  const selectedMovement = useMemo(
+    () =>
+      MOVEMENT_CARDS.find(
+        (movement) =>
+          movement.fromCategory === movementFrom && movement.toCategory === movementTo,
+      ),
+    [movementFrom, movementTo],
+  );
+  useEffect(() => {
+    if (!selectedMovement) {
+      setMovementList({
+        title: "Classification Movements",
+        fromCategory: movementFrom,
+        toCategory: movementTo,
+        users: [],
+      });
+      setMovementSearch("");
+      return;
+    }
+
+    loadMovements(selectedMovement);
+  }, [loadMovements, movementFrom, movementTo, selectedMovement]);
+
+  function selectMovementPath(fromCategory, toCategory) {
+    if (fromCategory === toCategory) {
+      return;
+    }
+
+    setMovementFrom(fromCategory);
+    setMovementTo(toCategory);
+  }
+
   async function handleUpload(event) {
     event.preventDefault();
 
@@ -762,18 +874,11 @@ function App() {
   }
 
   async function handleDeleteUpload(upload) {
-    const confirmed = window.confirm(
-      `Delete the latest upload from ${formatDate(upload.upload_date)}? This will remove its users, deleted-user results, and uploaded file.`,
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     setDeletingUploadId(upload.id);
     setMessage(null);
     try {
       await deleteUpload(upload.id);
+      setUploadPendingDelete(null);
       setMessage({
         type: "success",
         text: "Latest upload deleted. Data has been reverted to the previous upload.",
@@ -814,6 +919,7 @@ function App() {
   }
 
   const summary = dashboard?.summary ?? {};
+  const movementSummary = dashboard?.classification_movements_summary ?? {};
   const latestUpload = dashboard?.latest_upload;
   const selectedUpload = dashboard?.selected_upload;
   const filteredUserList = filterUsers(userList.users, userSearch);
@@ -909,6 +1015,83 @@ function App() {
                 value={summary.total_uploads}
                 onClick={openUploadHistory}
               />
+            </div>
+          </section>
+
+          <section className="section movement-section">
+            <div className="section-heading">
+              <div>
+                <h2>Classification Movements</h2>
+                <p>Users whose target classification changed on this upload.</p>
+              </div>
+              <ArrowRight size={20} aria-hidden="true" />
+            </div>
+
+            <div className="movement-matrix" aria-label="Classification transfer matrix">
+              <div className="matrix-corner">From / To</div>
+              {CATEGORY_OPTIONS.map((option) => (
+                <div className="matrix-heading" key={`to-${option.value}`}>
+                  {option.label}
+                </div>
+              ))}
+              {CATEGORY_OPTIONS.map((fromOption) => (
+                <React.Fragment key={`row-${fromOption.value}`}>
+                  <div className="matrix-heading row-heading">{fromOption.label}</div>
+                  {CATEGORY_OPTIONS.map((toOption) => {
+                    const movement = getMovementConfig(fromOption.value, toOption.value);
+                    const count = movement ? movementSummary[movement.summaryKey] ?? 0 : null;
+                    const isActive =
+                      movementFrom === fromOption.value && movementTo === toOption.value;
+
+                    if (!movement) {
+                      return (
+                        <div
+                          className="matrix-cell disabled"
+                          key={`${fromOption.value}-${toOption.value}`}
+                        >
+                          -
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        className={`matrix-cell ${isActive ? "active" : ""}`}
+                        key={`${fromOption.value}-${toOption.value}`}
+                        type="button"
+                        onClick={() => selectMovementPath(fromOption.value, toOption.value)}
+                        title={`${getCategoryLabel(fromOption.value)} to ${getCategoryLabel(toOption.value)}`}
+                      >
+                        {count}
+                      </button>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
+
+            <div className="movement-results">
+              <div className="search-row">
+                <input
+                  className="search-input"
+                  type="search"
+                  placeholder="Search user, ID, or name"
+                  value={movementSearch}
+                  onChange={(event) => setMovementSearch(event.target.value)}
+                  disabled={!selectedMovement}
+                />
+              </div>
+              <div className="scroll-panel movement-scroll">
+                {selectedMovement ? (
+                  <MovementUsersTable
+                    title={movementList.title}
+                    users={filteredMovementList}
+                    loading={movementsLoading}
+                  />
+                ) : (
+                  <div className="empty-state">Choose two different classifications.</div>
+                )}
+              </div>
             </div>
           </section>
 
@@ -1081,7 +1264,6 @@ function App() {
             <UploadHistoryList
               uploads={uploadHistory}
               onDeleteUpload={setUploadPendingDelete}
-              onDownloadUpload={handleDownloadUpload}
               deletingUploadId={deletingUploadId}
             />
           </section>
