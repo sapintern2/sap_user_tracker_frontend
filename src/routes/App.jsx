@@ -1,23 +1,40 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
+  ArrowRight,
   Eye,
   X,
   Database,
   FileSpreadsheet,
+  Lock,
+  Moon,
   RefreshCw,
+  Sun,
   Trash2,
   Upload,
+  UserCircle,
   Users,
 } from "lucide-react";
 
 import {
+  changePassword,
+  clearSession,
+  blockAdminUser,
+  createAdminUser,
   getCurrentUsers,
+  getClassificationMovements,
   getDashboard,
-  getMasterReportUrl,
+  getMe,
+  getStoredToken,
+  getStoredUser,
   getUploadHistory,
-  getUploadDownloadUrl,
   deleteUpload,
+  downloadMasterReport,
+  downloadUpload,
+  login,
+  resetAdminUserPassword,
+  storeSession,
+  unblockAdminUser,
   uploadExcel,
 } from "../services/api";
 
@@ -37,6 +54,59 @@ function formatDate(value) {
 
   return `${day}/${month}/${year.slice(-2)}`;
 }
+
+function formatDateTime(value) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Date(value).toLocaleString();
+}
+
+const MOVEMENT_CARDS = [
+  {
+    label: "Advanced to Core",
+    fromCategory: "advanced_users",
+    toCategory: "core_users",
+    summaryKey: "advanced_to_core",
+  },
+  {
+    label: "Advanced to Self-Service",
+    fromCategory: "advanced_users",
+    toCategory: "self_service_users",
+    summaryKey: "advanced_to_self_service",
+  },
+  {
+    label: "Core to Advanced",
+    fromCategory: "core_users",
+    toCategory: "advanced_users",
+    summaryKey: "core_to_advanced",
+  },
+  {
+    label: "Core to Self-Service",
+    fromCategory: "core_users",
+    toCategory: "self_service_users",
+    summaryKey: "core_to_self_service",
+  },
+  {
+    label: "Self-Service to Advanced",
+    fromCategory: "self_service_users",
+    toCategory: "advanced_users",
+    summaryKey: "self_service_to_advanced",
+  },
+  {
+    label: "Self-Service to Core",
+    fromCategory: "self_service_users",
+    toCategory: "core_users",
+    summaryKey: "self_service_to_core",
+  },
+];
+
+const CATEGORY_OPTIONS = [
+  { label: "Advanced Users", value: "advanced_users" },
+  { label: "Core Users", value: "core_users" },
+  { label: "Self-Service Users", value: "self_service_users" },
+];
 
 function StatCard({ label, value, onClick, active }) {
   if (onClick) {
@@ -134,6 +204,22 @@ function filterUsers(users, searchTerm) {
   );
 }
 
+function filterMovements(users, searchTerm) {
+  const term = searchTerm.trim().toLowerCase();
+  if (!term) {
+    return users;
+  }
+
+  return users.filter(
+    (user) =>
+      user.username.toLowerCase().includes(term) ||
+      (user.user_id || "").toLowerCase().includes(term) ||
+      (user.full_name || "").toLowerCase().includes(term) ||
+      (user.from_category || "").toLowerCase().includes(term) ||
+      (user.to_category || "").toLowerCase().includes(term),
+  );
+}
+
 function DeletedUsersTable({ users }) {
   if (!users?.length) {
     return <div className="empty-state">No deleted users for this date.</div>;
@@ -190,7 +276,7 @@ function TrendList({ rows }) {
   );
 }
 
-function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
+function UploadHistoryList({ uploads, onDeleteUpload, onDownloadUpload, deletingUploadId }) {
   if (!uploads?.length) {
     return <div className="empty-state compact">No uploads yet.</div>;
   }
@@ -219,9 +305,13 @@ function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
             </div>
           </dl>
           <div className="upload-actions">
-            <a className="download-link compact-action" href={getUploadDownloadUrl(upload.id)}>
+            <button
+              className="download-link compact-action"
+              type="button"
+              onClick={() => onDownloadUpload(upload)}
+            >
               Download
-            </a>
+            </button>
             <button
               className="danger-button compact-action"
               type="button"
@@ -243,7 +333,297 @@ function UploadHistoryList({ uploads, onDeleteUpload, deletingUploadId }) {
   );
 }
 
+function LoginScreen({ onLogin, loading, message }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onLogin(email, password);
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <div className="auth-mark">
+          <Database size={24} aria-hidden="true" />
+        </div>
+        <h1>SAP User Tracker</h1>
+        <p>Sign in with your allowed company email.</p>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="email"
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </label>
+          <button className="primary-button" type="submit" disabled={loading}>
+            <Lock size={17} aria-hidden="true" />
+            {loading ? "Signing in" : "Sign In"}
+          </button>
+        </form>
+        {message ? <div className={`message ${message.type}`}>{message.text}</div> : null}
+      </section>
+    </main>
+  );
+}
+
+function PasswordChangeScreen({ user, onChangePassword, onLogout, loading, message }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onChangePassword(newPassword, confirmPassword);
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <div className="auth-mark">
+          <Lock size={24} aria-hidden="true" />
+        </div>
+        <h1>Change Password</h1>
+        <p>{user.name}, update your default password before opening the dashboard.</p>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            New password
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              required
+            />
+          </label>
+          <label>
+            Confirm new password
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={8}
+              required
+            />
+          </label>
+          <button className="primary-button" type="submit" disabled={loading}>
+            {loading ? "Updating" : "Update Password"}
+          </button>
+        </form>
+        <button className="secondary-button auth-secondary" type="button" onClick={onLogout}>
+          Use another account
+        </button>
+        {message ? <div className={`message ${message.type}`}>{message.text}</div> : null}
+      </section>
+    </main>
+  );
+}
+
+function AdminPanel({
+  users,
+  loginEvents,
+  currentUser,
+  loading,
+  actionUserId,
+  message,
+  activeTab,
+  onTabChange,
+  onClose,
+  onAddUser,
+  onBlockUser,
+  onUnblockUser,
+  onResetPassword,
+  loginDate,
+  onLoginDateChange,
+  onResetLoginDate,
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onAddUser(name, email, () => {
+      setName("");
+      setEmail("");
+    });
+  }
+
+  return (
+    <div className="modal-backdrop admin-backdrop" role="presentation">
+      <section className="modal admin-modal" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+        <div className="modal-header">
+          <div>
+            <h2 id="admin-title">Admin Panel</h2>
+            <p>Manage allowed users, access status, and login activity.</p>
+          </div>
+          <div className="modal-actions">
+            <button className="icon-button close-button" type="button" onClick={onClose} title="Close">
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div className="admin-tabs">
+          <button
+            className={activeTab === "users" ? "active" : ""}
+            type="button"
+            onClick={() => onTabChange("users")}
+          >
+            Users
+          </button>
+          <button
+            className={activeTab === "logins" ? "active" : ""}
+            type="button"
+            onClick={() => onTabChange("logins")}
+          >
+            Login Activity
+          </button>
+        </div>
+
+        {message ? <div className={`message ${message.type}`}>{message.text}</div> : null}
+
+        {activeTab === "users" ? (
+          <>
+            <form className="admin-add-form" onSubmit={handleSubmit}>
+              <input
+                type="text"
+                placeholder="Name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                required
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+              <button className="primary-button" type="submit" disabled={loading}>
+                Add User
+              </button>
+            </form>
+            <div className="scroll-panel admin-scroll">
+              <table className="deleted-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>First Login</th>
+                    <th>Last Login</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.id}>
+                      <td>{user.name}</td>
+                      <td>{user.email}</td>
+                      <td>{user.role}</td>
+                      <td>{user.is_active ? "Active" : "Blocked"}</td>
+                      <td>{user.must_change_password ? "Pending" : "Done"}</td>
+                      <td>{formatDate(user.last_login_at) || "-"}</td>
+                      <td>
+                        <div className="admin-row-actions">
+                          {user.is_active ? (
+                            <button
+                              className="danger-button compact-action"
+                              type="button"
+                              onClick={() => onBlockUser(user)}
+                              disabled={user.id === currentUser.id || actionUserId === user.id}
+                            >
+                              Block
+                            </button>
+                          ) : (
+                            <button
+                              className="secondary-button compact-action"
+                              type="button"
+                              onClick={() => onUnblockUser(user)}
+                              disabled={actionUserId === user.id}
+                            >
+                              Unblock
+                            </button>
+                          )}
+                          <button
+                            className="secondary-button compact-action"
+                            type="button"
+                            onClick={() => onResetPassword(user)}
+                            disabled={actionUserId === user.id}
+                          >
+                            Reset
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="admin-filter-row">
+              <DateField value={loginDate} onChange={onLoginDateChange} max={today()} />
+              <button
+                className="icon-button"
+                type="button"
+                onClick={onResetLoginDate}
+                title="Show today's login activity"
+              >
+                <RefreshCw size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="scroll-panel admin-scroll">
+              <table className="deleted-table">
+                <thead>
+                  <tr>
+                    <th>Logged Time</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loginEvents.map((event) => (
+                    <tr key={event.id}>
+                      <td>{formatDateTime(event.created_at)}</td>
+                      <td>{event.name || "-"}</td>
+                      <td>{event.email}</td>
+                      <td>{event.success ? "Success" : "Failed"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
   const [selectedDate, setSelectedDate] = useState(today());
   const [statsDate, setStatsDate] = useState("");
   const [dashboard, setDashboard] = useState(null);
@@ -260,8 +640,10 @@ function App() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [isUserListOpen, setIsUserListOpen] = useState(false);
   const [userSearch, setUserSearch] = useState("");
+  const [movementList] = useState({ users: [] });
   const [uploadHistory, setUploadHistory] = useState([]);
   const [isUploadHistoryOpen, setIsUploadHistoryOpen] = useState(false);
+  const [uploadPendingDelete, setUploadPendingDelete] = useState(null);
   const [deletingUploadId, setDeletingUploadId] = useState(null);
 
   const loadDashboard = useCallback(async () => {
@@ -295,9 +677,48 @@ function App() {
   }, [loadUploadHistory]);
 
   useEffect(() => {
+    if (!getStoredToken()) {
+      setAuthLoading(false);
+      return;
+    }
+
+    async function loadSession() {
+      try {
+        const data = await getMe();
+        setCurrentUser(data.user);
+      } catch {
+        clearSession();
+        setCurrentUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    loadSession();
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser || currentUser.must_change_password) {
+      return;
+    }
+
     loadDashboard();
     loadUploadHistory();
   }, [loadDashboard, loadUploadHistory]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const hasOpenModal = isUserListOpen || isUploadHistoryOpen || uploadPendingDelete;
+    document.body.classList.toggle("modal-open", hasOpenModal);
+
+    return () => {
+      document.body.classList.remove("modal-open");
+    };
+  }, [isUserListOpen, isUploadHistoryOpen, uploadPendingDelete]);
 
   const loadCurrentUsers = useCallback(async (title, category = null) => {
     setUsersLoading(true);
@@ -366,6 +787,24 @@ function App() {
     }
   }
 
+  async function handleDownloadUpload(upload) {
+    setMessage(null);
+    try {
+      await downloadUpload(upload.id);
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    }
+  }
+
+  async function handleDownloadMasterReport() {
+    setMessage(null);
+    try {
+      await downloadMasterReport();
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    }
+  }
+
   function resetDeletedUsersDate() {
     setSelectedDate(latestUpload?.upload_date ?? today());
   }
@@ -378,6 +817,7 @@ function App() {
   const latestUpload = dashboard?.latest_upload;
   const selectedUpload = dashboard?.selected_upload;
   const filteredUserList = filterUsers(userList.users, userSearch);
+  const filteredMovementList = filterMovements(movementList.users, movementSearch);
 
   return (
     <div className="app-shell">
@@ -392,6 +832,18 @@ function App() {
               <p>Daily SAP access monitoring</p>
             </div>
           </div>
+          <button
+            className={`theme-toggle ${theme === "dark" ? "dark" : "light"}`}
+            type="button"
+            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+            title={theme === "dark" ? "Switch to day mode" : "Switch to night mode"}
+          >
+            {theme === "dark" ? (
+              <Sun size={18} aria-hidden="true" />
+            ) : (
+              <Moon size={18} aria-hidden="true" />
+            )}
+          </button>
         </div>
       </header>
 
@@ -518,7 +970,7 @@ function App() {
                 />
               </div>
 
-              <button className="primary-button" type="submit" disabled={uploading}>
+            <button className="primary-button" type="submit" disabled={uploading}>
                 <Upload size={18} aria-hidden="true" />
                 {uploading ? "Uploading" : "Upload"}
               </button>
@@ -548,10 +1000,10 @@ function App() {
               </div>
               <FileSpreadsheet size={20} aria-hidden="true" />
             </div>
-            <a className="report-download" href={getMasterReportUrl()}>
+            <button className="report-download" type="button" onClick={handleDownloadMasterReport}>
               <FileSpreadsheet size={18} aria-hidden="true" />
               Download Master Report
-            </a>
+            </button>
           </section>
         </aside>
       </main>
@@ -628,9 +1080,69 @@ function App() {
             </div>
             <UploadHistoryList
               uploads={uploadHistory}
-              onDeleteUpload={handleDeleteUpload}
+              onDeleteUpload={setUploadPendingDelete}
+              onDownloadUpload={handleDownloadUpload}
               deletingUploadId={deletingUploadId}
             />
+          </section>
+        </div>
+      ) : null}
+
+      {uploadPendingDelete ? (
+        <div className="modal-backdrop confirm-backdrop" role="presentation">
+          <section
+            className="modal confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-upload-title"
+          >
+            <div className="confirm-icon" aria-hidden="true">
+              <Trash2 size={22} />
+            </div>
+            <div>
+              <h2 id="delete-upload-title">Delete latest upload?</h2>
+              <p>
+                This will remove the upload, its users, deleted-user results,
+                classification movements, and the uploaded Excel file.
+              </p>
+            </div>
+            <dl className="confirm-details">
+              <div>
+                <dt>Upload date</dt>
+                <dd>{formatDate(uploadPendingDelete.upload_date)}</dd>
+              </div>
+              <div>
+                <dt>File</dt>
+                <dd title={uploadPendingDelete.file_name}>{uploadPendingDelete.file_name}</dd>
+              </div>
+              <div>
+                <dt>Total users</dt>
+                <dd>{uploadPendingDelete.total_users}</dd>
+              </div>
+              <div>
+                <dt>Deleted users</dt>
+                <dd>{uploadPendingDelete.deleted_users}</dd>
+              </div>
+            </dl>
+            <div className="confirm-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setUploadPendingDelete(null)}
+                disabled={deletingUploadId === uploadPendingDelete.id}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => handleDeleteUpload(uploadPendingDelete)}
+                disabled={deletingUploadId === uploadPendingDelete.id}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                {deletingUploadId === uploadPendingDelete.id ? "Deleting" : "Delete Upload"}
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
