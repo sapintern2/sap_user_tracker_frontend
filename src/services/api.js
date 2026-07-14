@@ -57,7 +57,9 @@ async function request(path, options = {}) {
       clearSession();
     }
 
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();
@@ -145,9 +147,21 @@ export function resetAdminUserPassword(userId) {
   });
 }
 
+export function deleteAdminUser(userId) {
+  return request(`/admin/users/${userId}`, {
+    method: "DELETE",
+  });
+}
+
 export function getAdminLogins(loginDate) {
   const params = loginDate ? `?login_date=${loginDate}` : "";
   return request(`/admin/logins${params}`);
+}
+
+export function clearAdminLogins(loginDate) {
+  return request(`/admin/logins?login_date=${loginDate}`, {
+    method: "DELETE",
+  });
 }
 
 export function getDashboard(deletedDate, statsDate) {
