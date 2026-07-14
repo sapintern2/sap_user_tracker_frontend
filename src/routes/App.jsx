@@ -1,26 +1,36 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Ban,
   CalendarDays,
   ArrowRight,
+  Shield,
   Eye,
   X,
   Database,
   FileSpreadsheet,
+  KeyRound,
+  Lock,
+  LogOut,
   Moon,
   RefreshCw,
   Sun,
   Trash2,
   Upload,
   UserCircle,
+  UserCheck,
   Users,
 } from "lucide-react";
 
 import {
   changePassword,
+  clearAdminLogins,
   clearSession,
   blockAdminUser,
   createAdminUser,
+  deleteAdminUser,
   getCurrentUsers,
+  getAdminLogins,
+  getAdminUsers,
   getClassificationMovements,
   getDashboard,
   getMe,
@@ -38,7 +48,14 @@ import {
 } from "../services/api";
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Colombo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function formatDate(value) {
@@ -52,6 +69,46 @@ function formatDate(value) {
   }
 
   return `${day}/${month}/${year.slice(-2)}`;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Colombo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+function formatTime(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Colombo",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(date);
 }
 
 const MOVEMENT_CARDS = [
@@ -494,10 +551,12 @@ function AdminPanel({
   activeTab,
   onTabChange,
   onClose,
-  onAddUser,
+  onPrepareAddUser,
   onBlockUser,
   onUnblockUser,
   onResetPassword,
+  onDeleteUser,
+  onClearLogins,
   loginDate,
   onLoginDateChange,
   onResetLoginDate,
@@ -507,7 +566,7 @@ function AdminPanel({
 
   function handleSubmit(event) {
     event.preventDefault();
-    onAddUser(name, email, () => {
+    onPrepareAddUser(name, email, () => {
       setName("");
       setEmail("");
     });
@@ -569,7 +628,7 @@ function AdminPanel({
               </button>
             </form>
             <div className="scroll-panel admin-scroll">
-              <table className="deleted-table">
+              <table className="deleted-table admin-table">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -584,45 +643,83 @@ function AdminPanel({
                 <tbody>
                   {users.map((user) => (
                     <tr key={user.id}>
-                      <td>{user.name}</td>
-                      <td>{user.email}</td>
-                      <td>{user.role}</td>
-                      <td>{user.is_active ? "Active" : "Blocked"}</td>
+                      <td className="strong-cell">{user.name}</td>
+                      <td title={user.email}>{user.email}</td>
+                      <td>
+                        <span className={`status-pill ${user.role === "admin" ? "admin" : ""}`}>
+                          {user.role}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-pill ${user.is_active ? "success" : "danger"}`}>
+                          {user.is_active ? "Active" : "Blocked"}
+                        </span>
+                      </td>
                       <td>{user.must_change_password ? "Pending" : "Done"}</td>
-                      <td>{formatDate(user.last_login_at) || "-"}</td>
+                      <td>{formatDateTime(user.last_login_at) || "-"}</td>
                       <td>
                         <div className="admin-row-actions">
                           {user.is_active ? (
                             <button
-                              className="danger-button compact-action"
+                              className="danger-button compact-action icon-action"
                               type="button"
                               onClick={() => onBlockUser(user)}
                               disabled={user.id === currentUser.id || actionUserId === user.id}
+                              title="Block user"
+                              aria-label={`Block ${user.name}`}
                             >
-                              Block
+                              <Ban size={15} aria-hidden="true" />
                             </button>
                           ) : (
                             <button
-                              className="secondary-button compact-action"
+                              className="secondary-button compact-action icon-action"
                               type="button"
                               onClick={() => onUnblockUser(user)}
                               disabled={actionUserId === user.id}
+                              title="Unblock user"
+                              aria-label={`Unblock ${user.name}`}
                             >
-                              Unblock
+                              <UserCheck size={15} aria-hidden="true" />
                             </button>
                           )}
                           <button
-                            className="secondary-button compact-action"
+                            className="secondary-button compact-action icon-action"
                             type="button"
                             onClick={() => onResetPassword(user)}
                             disabled={actionUserId === user.id}
+                            title="Reset password"
+                            aria-label={`Reset password for ${user.name}`}
                           >
-                            Reset
+                            <KeyRound size={15} aria-hidden="true" />
+                          </button>
+                          <button
+                            className="danger-button compact-action icon-action"
+                            type="button"
+                            onClick={() => onDeleteUser(user)}
+                            disabled={user.id === currentUser.id || actionUserId === user.id}
+                            title="Delete user"
+                            aria-label={`Delete ${user.name}`}
+                          >
+                            <Trash2 size={15} aria-hidden="true" />
                           </button>
                         </div>
                       </td>
                     </tr>
                   ))}
+                  {!loading && users.length === 0 ? (
+                    <tr>
+                      <td className="empty-table-cell" colSpan="7">
+                        No users found.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {loading ? (
+                    <tr>
+                      <td className="empty-table-cell" colSpan="7">
+                        Loading users...
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>
@@ -639,12 +736,22 @@ function AdminPanel({
               >
                 <RefreshCw size={18} aria-hidden="true" />
               </button>
+              <button
+                className="icon-button danger-icon-button"
+                type="button"
+                onClick={onClearLogins}
+                disabled={!loginEvents.length || loading}
+                title="Clear login activity for selected date"
+                aria-label="Clear login activity for selected date"
+              >
+                <Trash2 size={18} aria-hidden="true" />
+              </button>
             </div>
             <div className="scroll-panel admin-scroll">
-              <table className="deleted-table">
+              <table className="deleted-table admin-table login-activity-table">
                 <thead>
                   <tr>
-                    <th>Logged Time</th>
+                    <th>Time</th>
                     <th>Name</th>
                     <th>Email</th>
                     <th>Result</th>
@@ -653,12 +760,30 @@ function AdminPanel({
                 <tbody>
                   {loginEvents.map((event) => (
                     <tr key={event.id}>
-                      <td>{formatDateTime(event.created_at)}</td>
-                      <td>{event.name || "-"}</td>
-                      <td>{event.email}</td>
-                      <td>{event.success ? "Success" : "Failed"}</td>
+                      <td>{formatTime(event.created_at)}</td>
+                      <td className="strong-cell">{event.name || "-"}</td>
+                      <td title={event.email}>{event.email}</td>
+                      <td>
+                        <span className={`status-pill ${event.success ? "success" : "danger"}`}>
+                          {event.success ? "Success" : "Failed"}
+                        </span>
+                      </td>
                     </tr>
                   ))}
+                  {!loading && loginEvents.length === 0 ? (
+                    <tr>
+                      <td className="empty-table-cell" colSpan="4">
+                        No login activity found for this date.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {loading ? (
+                    <tr>
+                      <td className="empty-table-cell" colSpan="4">
+                        Loading login activity...
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>
@@ -670,6 +795,24 @@ function AdminPanel({
 }
 
 function App() {
+  const [currentUser, setCurrentUser] = useState(() => getStoredUser());
+  const [authLoading, setAuthLoading] = useState(Boolean(getStoredToken()));
+  const [authMessage, setAuthMessage] = useState(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+  const [adminTab, setAdminTab] = useState("users");
+  const [adminLoginDate, setAdminLoginDate] = useState(today());
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminLoginEvents, setAdminLoginEvents] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminActionUserId, setAdminActionUserId] = useState(null);
+  const [adminMessage, setAdminMessage] = useState(null);
+  const [addPendingUser, setAddPendingUser] = useState(null);
+  const [blockPendingUser, setBlockPendingUser] = useState(null);
+  const [resetPendingUser, setResetPendingUser] = useState(null);
+  const [deletePendingUser, setDeletePendingUser] = useState(null);
+  const [clearLoginsPending, setClearLoginsPending] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
   const [selectedDate, setSelectedDate] = useState(today());
   const [statsDate, setStatsDate] = useState("");
@@ -761,7 +904,7 @@ function App() {
 
     loadDashboard();
     loadUploadHistory();
-  }, [loadDashboard, loadUploadHistory]);
+  }, [currentUser, loadDashboard, loadUploadHistory]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -769,13 +912,195 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    const hasOpenModal = isUserListOpen || isUploadHistoryOpen || uploadPendingDelete;
+    const hasOpenModal =
+      isUserListOpen ||
+      isUploadHistoryOpen ||
+      uploadPendingDelete ||
+      isAdminPanelOpen ||
+      addPendingUser ||
+      blockPendingUser ||
+      resetPendingUser ||
+      deletePendingUser ||
+      clearLoginsPending ||
+      isLogoutConfirmOpen;
     document.body.classList.toggle("modal-open", hasOpenModal);
 
     return () => {
       document.body.classList.remove("modal-open");
     };
-  }, [isUserListOpen, isUploadHistoryOpen, uploadPendingDelete]);
+  }, [
+    isUserListOpen,
+    isUploadHistoryOpen,
+    uploadPendingDelete,
+    isAdminPanelOpen,
+    addPendingUser,
+    blockPendingUser,
+    resetPendingUser,
+    deletePendingUser,
+    clearLoginsPending,
+    isLogoutConfirmOpen,
+  ]);
+
+  const loadAdminData = useCallback(async (tab) => {
+    setAdminLoading(true);
+    setAdminMessage(null);
+    try {
+      if (tab === "users") {
+        const data = await getAdminUsers();
+        setAdminUsers(data.users ?? []);
+      } else {
+        const data = await getAdminLogins(adminLoginDate);
+        setAdminLoginEvents(data.events ?? []);
+      }
+    } catch (error) {
+      const text =
+        error.status === 401
+          ? "Your login session expired. Please log in again."
+          : error.status === 403
+            ? "Admin access is required to load this data."
+            : error.message;
+      setAdminMessage({ type: "error", text });
+    } finally {
+      setAdminLoading(false);
+    }
+  }, [adminLoginDate]);
+
+  useEffect(() => {
+    if (!isAdminPanelOpen) {
+      return;
+    }
+
+    loadAdminData(adminTab);
+  }, [adminLoginDate, adminTab, isAdminPanelOpen, loadAdminData]);
+
+  function openAdminPanel() {
+    setIsAdminPanelOpen(true);
+    setAdminTab("users");
+  }
+
+  function handleAdminTabChange(tab) {
+    setAdminTab(tab);
+  }
+
+  function handleResetAdminLoginDate() {
+    const todayValue = today();
+    if (adminLoginDate === todayValue) {
+      loadAdminData("logins");
+      return;
+    }
+
+    setAdminLoginDate(todayValue);
+  }
+
+  function prepareAddAdminUser(name, email, onSuccess) {
+    setAddPendingUser({
+      name: name.trim(),
+      email: email.trim(),
+      onSuccess,
+    });
+  }
+
+  async function handleAddAdminUser(pendingUser) {
+    setAdminLoading(true);
+    setAdminMessage(null);
+    try {
+      await createAdminUser(pendingUser.name, pendingUser.email);
+      setAdminMessage({ type: "success", text: "User added with the default first-login password." });
+      pendingUser.onSuccess();
+      setAddPendingUser(null);
+      await loadAdminData("users");
+    } catch (error) {
+      setAdminMessage({ type: "error", text: error.message });
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function handleAdminUserAction(user, action) {
+    setAdminActionUserId(user.id);
+    setAdminMessage(null);
+    try {
+      if (action === "block") {
+        await blockAdminUser(user.id);
+        setBlockPendingUser(null);
+      } else if (action === "unblock") {
+        await unblockAdminUser(user.id);
+      } else if (action === "delete") {
+        await deleteAdminUser(user.id);
+        setDeletePendingUser(null);
+      } else {
+        await resetAdminUserPassword(user.id);
+        setResetPendingUser(null);
+      }
+      await loadAdminData("users");
+    } catch (error) {
+      setAdminMessage({ type: "error", text: error.message });
+    } finally {
+      setAdminActionUserId(null);
+    }
+  }
+
+  async function handleClearAdminLogins() {
+    setAdminLoading(true);
+    setAdminMessage(null);
+    try {
+      const result = await clearAdminLogins(adminLoginDate);
+      setClearLoginsPending(false);
+      setAdminLoginEvents([]);
+      setAdminMessage({
+        type: "success",
+        text: `Cleared ${result.deleted ?? 0} login activity records and ${result.last_login_cleared ?? 0} last-login values for ${formatDate(adminLoginDate)}.`,
+      });
+      await loadAdminData(adminTab);
+    } catch (error) {
+      setAdminMessage({ type: "error", text: error.message });
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function handleLogin(email, password) {
+    setAuthLoading(true);
+    setAuthMessage(null);
+    try {
+      const data = await login(email, password);
+      storeSession(data.access_token, data.user);
+      setCurrentUser(data.user);
+    } catch (error) {
+      setAuthMessage({ type: "error", text: error.message });
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleChangePassword(newPassword, confirmPassword) {
+    if (newPassword !== confirmPassword) {
+      setAuthMessage({ type: "error", text: "New passwords do not match." });
+      return;
+    }
+
+    setPasswordLoading(true);
+    setAuthMessage(null);
+    try {
+      const data = await changePassword(newPassword);
+      storeSession(data.access_token, data.user);
+      setCurrentUser(data.user);
+    } catch (error) {
+      setAuthMessage({ type: "error", text: error.message });
+    } finally {
+      setPasswordLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    clearSession();
+    setIsLogoutConfirmOpen(false);
+    setCurrentUser(null);
+    setDashboard(null);
+    setUploadHistory([]);
+    setMessage(null);
+    setAuthMessage(null);
+  }
 
   const loadCurrentUsers = useCallback(async (title, category = null) => {
     setUsersLoading(true);
@@ -925,6 +1250,36 @@ function App() {
   const filteredUserList = filterUsers(userList.users, userSearch);
   const filteredMovementList = filterMovements(movementList.users, movementSearch);
 
+  if (authLoading) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-card">
+          <div className="auth-mark">
+            <Database size={24} aria-hidden="true" />
+          </div>
+          <h1>SAP User Tracker</h1>
+          <p>Checking your login session...</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginScreen onLogin={handleLogin} loading={authLoading} message={authMessage} />;
+  }
+
+  if (currentUser.must_change_password) {
+    return (
+      <PasswordChangeScreen
+        user={currentUser}
+        onChangePassword={handleChangePassword}
+        onLogout={handleLogout}
+        loading={passwordLoading}
+        message={authMessage}
+      />
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -938,18 +1293,41 @@ function App() {
               <p>Daily SAP access monitoring</p>
             </div>
           </div>
-          <button
-            className={`theme-toggle ${theme === "dark" ? "dark" : "light"}`}
-            type="button"
-            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            title={theme === "dark" ? "Switch to day mode" : "Switch to night mode"}
-          >
-            {theme === "dark" ? (
-              <Sun size={18} aria-hidden="true" />
-            ) : (
-              <Moon size={18} aria-hidden="true" />
-            )}
-          </button>
+          <div className="topbar-actions">
+            <button
+              className={`theme-toggle ${theme === "dark" ? "dark" : "light"}`}
+              type="button"
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              title={theme === "dark" ? "Switch to day mode" : "Switch to night mode"}
+            >
+              {theme === "dark" ? (
+                <Sun size={18} aria-hidden="true" />
+              ) : (
+                <Moon size={18} aria-hidden="true" />
+              )}
+            </button>
+            <div className="profile-menu">
+              <UserCircle size={22} aria-hidden="true" />
+              <div>
+                <strong>{currentUser.name}</strong>
+                <span>{currentUser.email}</span>
+              </div>
+              {currentUser.role === "admin" ? (
+                <button className="admin-button" type="button" onClick={openAdminPanel}>
+                  <Shield size={15} aria-hidden="true" />
+                  Admin
+                </button>
+              ) : null}
+              <button
+                className="icon-button logout-button"
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(true)}
+                title="Logout"
+              >
+                <LogOut size={17} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -1264,6 +1642,7 @@ function App() {
             <UploadHistoryList
               uploads={uploadHistory}
               onDeleteUpload={setUploadPendingDelete}
+              onDownloadUpload={handleDownloadUpload}
               deletingUploadId={deletingUploadId}
             />
           </section>
@@ -1323,6 +1702,343 @@ function App() {
               >
                 <Trash2 size={16} aria-hidden="true" />
                 {deletingUploadId === uploadPendingDelete.id ? "Deleting" : "Delete Upload"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isLogoutConfirmOpen ? (
+        <div className="modal-backdrop confirm-backdrop" role="presentation">
+          <section
+            className="modal confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+          >
+            <div className="confirm-icon" aria-hidden="true">
+              <LogOut size={22} />
+            </div>
+            <div>
+              <h2 id="logout-title">Log out?</h2>
+              <p>You will need to sign in again to access the SAP User Tracker.</p>
+            </div>
+            <dl className="confirm-details">
+              <div>
+                <dt>Name</dt>
+                <dd>{currentUser.name}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd title={currentUser.email}>{currentUser.email}</dd>
+              </div>
+            </dl>
+            <div className="confirm-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button className="danger-button" type="button" onClick={handleLogout}>
+                <LogOut size={16} aria-hidden="true" />
+                Log Out
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isAdminPanelOpen ? (
+        <AdminPanel
+          users={adminUsers}
+          loginEvents={adminLoginEvents}
+          currentUser={currentUser}
+          loading={adminLoading}
+          actionUserId={adminActionUserId}
+          message={adminMessage}
+          activeTab={adminTab}
+          onTabChange={handleAdminTabChange}
+          onClose={() => setIsAdminPanelOpen(false)}
+          onPrepareAddUser={prepareAddAdminUser}
+          onBlockUser={setBlockPendingUser}
+          onUnblockUser={(user) => handleAdminUserAction(user, "unblock")}
+          onResetPassword={setResetPendingUser}
+          onDeleteUser={setDeletePendingUser}
+          onClearLogins={() => setClearLoginsPending(true)}
+          loginDate={adminLoginDate}
+          onLoginDateChange={setAdminLoginDate}
+          onResetLoginDate={handleResetAdminLoginDate}
+        />
+      ) : null}
+
+      {addPendingUser ? (
+        <div className="modal-backdrop confirm-backdrop" role="presentation">
+          <section
+            className="modal confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-user-title"
+          >
+            <div className="confirm-icon" aria-hidden="true">
+              <UserCheck size={22} />
+            </div>
+            <div>
+              <h2 id="add-user-title">Add user?</h2>
+              <p>The user will be allowed to log in with the default first-login password.</p>
+            </div>
+            <dl className="confirm-details">
+              <div>
+                <dt>Name</dt>
+                <dd>{addPendingUser.name}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd title={addPendingUser.email}>{addPendingUser.email}</dd>
+              </div>
+              <div>
+                <dt>Default password</dt>
+                <dd>Pannipitiya@123</dd>
+              </div>
+              <div>
+                <dt>First login</dt>
+                <dd>Password change required</dd>
+              </div>
+            </dl>
+            <div className="confirm-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setAddPendingUser(null)}
+                disabled={adminLoading}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => handleAddAdminUser(addPendingUser)}
+                disabled={adminLoading}
+              >
+                <UserCheck size={16} aria-hidden="true" />
+                {adminLoading ? "Adding" : "Add User"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {blockPendingUser ? (
+        <div className="modal-backdrop confirm-backdrop" role="presentation">
+          <section
+            className="modal confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="block-user-title"
+          >
+            <div className="confirm-icon" aria-hidden="true">
+              <Shield size={22} />
+            </div>
+            <div>
+              <h2 id="block-user-title">Block user?</h2>
+              <p>This user will not be able to sign in until an admin unblocks them.</p>
+            </div>
+            <dl className="confirm-details">
+              <div>
+                <dt>Name</dt>
+                <dd>{blockPendingUser.name}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd title={blockPendingUser.email}>{blockPendingUser.email}</dd>
+              </div>
+              <div>
+                <dt>Role</dt>
+                <dd>{blockPendingUser.role}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{blockPendingUser.is_active ? "Active" : "Blocked"}</dd>
+              </div>
+            </dl>
+            <div className="confirm-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setBlockPendingUser(null)}
+                disabled={adminActionUserId === blockPendingUser.id}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => handleAdminUserAction(blockPendingUser, "block")}
+                disabled={adminActionUserId === blockPendingUser.id}
+              >
+                <Shield size={16} aria-hidden="true" />
+                {adminActionUserId === blockPendingUser.id ? "Blocking" : "Block User"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {resetPendingUser ? (
+        <div className="modal-backdrop confirm-backdrop" role="presentation">
+          <section
+            className="modal confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-password-title"
+          >
+            <div className="confirm-icon" aria-hidden="true">
+              <Lock size={22} />
+            </div>
+            <div>
+              <h2 id="reset-password-title">Reset password?</h2>
+              <p>The user will use the default password and must change it at the next login.</p>
+            </div>
+            <dl className="confirm-details">
+              <div>
+                <dt>Name</dt>
+                <dd>{resetPendingUser.name}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd title={resetPendingUser.email}>{resetPendingUser.email}</dd>
+              </div>
+              <div>
+                <dt>Default password</dt>
+                <dd>Pannipitiya@123</dd>
+              </div>
+              <div>
+                <dt>Next login</dt>
+                <dd>Password change required</dd>
+              </div>
+            </dl>
+            <div className="confirm-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setResetPendingUser(null)}
+                disabled={adminActionUserId === resetPendingUser.id}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => handleAdminUserAction(resetPendingUser, "reset")}
+                disabled={adminActionUserId === resetPendingUser.id}
+              >
+                <Lock size={16} aria-hidden="true" />
+                {adminActionUserId === resetPendingUser.id ? "Resetting" : "Reset Password"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {deletePendingUser ? (
+        <div className="modal-backdrop confirm-backdrop" role="presentation">
+          <section
+            className="modal confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-user-title"
+          >
+            <div className="confirm-icon" aria-hidden="true">
+              <Trash2 size={22} />
+            </div>
+            <div>
+              <h2 id="delete-user-title">Delete user?</h2>
+              <p>This removes the user from allowed access. Their old login history stays available.</p>
+            </div>
+            <dl className="confirm-details">
+              <div>
+                <dt>Name</dt>
+                <dd>{deletePendingUser.name}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd title={deletePendingUser.email}>{deletePendingUser.email}</dd>
+              </div>
+              <div>
+                <dt>Role</dt>
+                <dd>{deletePendingUser.role}</dd>
+              </div>
+              <div>
+                <dt>Access</dt>
+                <dd>Login disabled immediately</dd>
+              </div>
+            </dl>
+            <div className="confirm-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setDeletePendingUser(null)}
+                disabled={adminActionUserId === deletePendingUser.id}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => handleAdminUserAction(deletePendingUser, "delete")}
+                disabled={adminActionUserId === deletePendingUser.id}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                {adminActionUserId === deletePendingUser.id ? "Deleting" : "Delete User"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {clearLoginsPending ? (
+        <div className="modal-backdrop confirm-backdrop" role="presentation">
+          <section
+            className="modal confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clear-logins-title"
+          >
+            <div className="confirm-icon" aria-hidden="true">
+              <Trash2 size={22} />
+            </div>
+            <div>
+              <h2 id="clear-logins-title">Clear login activity?</h2>
+              <p>This will remove all login activity records for the selected date.</p>
+            </div>
+            <dl className="confirm-details">
+              <div>
+                <dt>Date</dt>
+                <dd>{formatDate(adminLoginDate)}</dd>
+              </div>
+              <div>
+                <dt>Records</dt>
+                <dd>{adminLoginEvents.length}</dd>
+              </div>
+            </dl>
+            <div className="confirm-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setClearLoginsPending(false)}
+                disabled={adminLoading}
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={handleClearAdminLogins}
+                disabled={adminLoading}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                {adminLoading ? "Clearing" : "Clear Activity"}
               </button>
             </div>
           </section>
