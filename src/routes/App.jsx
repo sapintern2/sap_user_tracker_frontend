@@ -19,6 +19,7 @@ import {
   UserCircle,
   UserCheck,
   Users,
+  UserPlus,
 } from "lucide-react";
 
 import {
@@ -34,6 +35,7 @@ import {
   getClassificationMovements,
   getDashboard,
   getMe,
+  getNewUsers,
   getStoredToken,
   getStoredUser,
   getUploadHistory,
@@ -156,10 +158,12 @@ const CATEGORY_OPTIONS = [
   { label: "Self-Service Users", value: "self_service_users" },
 ];
 
-function StatCard({ label, value, onClick, active }) {
+function StatCard({ label, value, onClick, active, className = "" }) {
+  const cardClassName = `stat-card ${active ? "active" : ""} ${className}`.trim();
+
   if (onClick) {
     return (
-      <article className={`stat-card ${active ? "active" : ""}`}>
+      <article className={cardClassName}>
         <span>{label}</span>
         <strong>{value ?? 0}</strong>
         <button className="view-button" type="button" onClick={onClick}>
@@ -171,7 +175,7 @@ function StatCard({ label, value, onClick, active }) {
   }
 
   return (
-    <article className="stat-card">
+    <article className={cardClassName}>
       <span>{label}</span>
       <strong>{value ?? 0}</strong>
     </article>
@@ -355,14 +359,14 @@ function DeletedUsersTable({ users }) {
   );
 }
 
-function TrendList({ rows }) {
+function TrendList({ rows, emptyText = "No trend yet.", variant = "deleted" }) {
   const maxCount = useMemo(
     () => Math.max(1, ...(rows || []).map((row) => row.count)),
     [rows],
   );
 
   if (!rows?.length) {
-    return <div className="empty-state">No deletion trend yet.</div>;
+    return <div className="empty-state">{emptyText}</div>;
   }
 
   return (
@@ -372,7 +376,10 @@ function TrendList({ rows }) {
           <li className="trend-item" key={row.date}>
             <span>{formatDate(row.date)}</span>
             <strong>{row.count}</strong>
-            <div className="bar" aria-hidden="true">
+            <div
+              className={`bar ${variant === "addition" ? "addition-bar" : ""}`}
+              aria-hidden="true"
+            >
               <span style={{ width: `${(row.count / maxCount) * 100}%` }} />
             </div>
           </li>
@@ -822,6 +829,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
+  const [newUsersList, setNewUsersList] = useState([]);
+  const [isNewUsersOpen, setIsNewUsersOpen] = useState(false);
+  const [newUsersLoading, setNewUsersLoading] = useState(false);
+  const [isDeletedUsersOpen, setIsDeletedUsersOpen] = useState(false);
   const [userList, setUserList] = useState({
     title: "Total Users",
     category: null,
@@ -840,6 +851,7 @@ function App() {
   const [movementSearch, setMovementSearch] = useState("");
   const [movementFrom, setMovementFrom] = useState("advanced_users");
   const [movementTo, setMovementTo] = useState("core_users");
+  const [activeTrendTab, setActiveTrendTab] = useState("addition");
   const [uploadHistory, setUploadHistory] = useState([]);
   const [isUploadHistoryOpen, setIsUploadHistoryOpen] = useState(false);
   const [uploadPendingDelete, setUploadPendingDelete] = useState(null);
@@ -920,7 +932,9 @@ function App() {
       addPendingUser ||
       blockPendingUser ||
       resetPendingUser ||
+      isDeletedUsersOpen ||
       deletePendingUser ||
+      isNewUsersOpen ||
       clearLoginsPending ||
       isLogoutConfirmOpen;
     document.body.classList.toggle("modal-open", hasOpenModal);
@@ -939,6 +953,7 @@ function App() {
     deletePendingUser,
     clearLoginsPending,
     isLogoutConfirmOpen,
+    isDeletedUsersOpen,
   ]);
 
   const loadAdminData = useCallback(async (tab) => {
@@ -1235,6 +1250,25 @@ function App() {
     }
   }
 
+  function openDeletedUsers() {
+    setIsDeletedUsersOpen(true);
+  }
+
+  async function openNewUsers() {
+    setNewUsersLoading(true);
+    setMessage(null);
+
+    try {
+      const data = await getNewUsers(statsDate);
+      setNewUsersList(data.users ?? []);
+      setIsNewUsersOpen(true);
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally {
+      setNewUsersLoading(false);
+    }
+  }
+
   function resetDeletedUsersDate() {
     setSelectedDate(latestUpload?.upload_date ?? today());
   }
@@ -1247,6 +1281,10 @@ function App() {
   const movementSummary = dashboard?.classification_movements_summary ?? {};
   const latestUpload = dashboard?.latest_upload;
   const selectedUpload = dashboard?.selected_upload;
+  const isAdditionTrend = activeTrendTab === "addition";
+  const activeTrendRows = isAdditionTrend
+    ? dashboard?.new_user_trend ?? []
+    : dashboard?.deleted_user_trend ?? [];
   const filteredUserList = filterUsers(userList.users, userSearch);
   const filteredMovementList = filterMovements(movementList.users, movementSearch);
 
@@ -1384,15 +1422,21 @@ function App() {
                   loadCurrentUsers("Self-Service Users", "self_service_users")
                 }
               />
+
               <StatCard
-                label="Deleted On Dashboard Date"
+                label="Newly Added Users"
+                value={summary.new_users_for_stats_date}
+                onClick={openNewUsers}
+                className="additions"
+              />
+
+              <StatCard
+                label="Deleted Users"
                 value={summary.deleted_users_for_stats_date}
+                onClick={openDeletedUsers}
+                className="deletions"
               />
-              <StatCard
-                label="Total Uploads"
-                value={summary.total_uploads}
-                onClick={openUploadHistory}
-              />
+
             </div>
           </section>
 
@@ -1472,31 +1516,6 @@ function App() {
               </div>
             </div>
           </section>
-
-          <section className="section">
-            <div className="section-heading">
-              <div>
-                <h2>Deleted Users</h2>
-                <p>Filter deleted users day by day.</p>
-              </div>
-              <div className="controls">
-                <strong className="list-count">
-                  {summary.deleted_users_for_selected_date ?? 0}
-                </strong>
-                <DateField value={selectedDate} onChange={setSelectedDate} />
-                <button
-                  className="icon-button"
-                  type="button"
-                  onClick={resetDeletedUsersDate}
-                  title="Show latest deleted users"
-                >
-                  <RefreshCw size={18} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-
-            <DeletedUsersTable users={dashboard?.deleted_users ?? []} />
-          </section>
         </div>
 
         <aside className="side-column">
@@ -1507,6 +1526,11 @@ function App() {
                 <p>Use the daily SAP export file.</p>
               </div>
               <Upload size={20} aria-hidden="true" />
+            </div>
+
+            <div className="upload-meta">
+              <span>Total Uploads</span>
+              <strong>{summary.total_uploads ?? 0}</strong>
             </div>
 
             <form className="upload-form" onSubmit={handleUpload}>
@@ -1545,12 +1569,38 @@ function App() {
           <section className="panel section">
             <div className="section-heading">
               <div>
-                <h2>Deletion Trend</h2>
-                <p>Daily deleted-user counts.</p>
+                <h2>User Trend</h2>
+                <p>{isAdditionTrend ? "Daily newly added user counts." : "Daily deleted-user counts."}</p>
               </div>
-              <Users size={20} aria-hidden="true" />
+              {isAdditionTrend ? (
+                <UserPlus size={20} aria-hidden="true" />
+              ) : (
+                <Users size={20} aria-hidden="true" />
+              )}
             </div>
-            <TrendList rows={dashboard?.deleted_user_trend ?? []} />
+            <div className="trend-tabs" role="tablist" aria-label="User trend type">
+              <button
+                className={activeTrendTab === "addition" ? "active addition-tab" : ""}
+                type="button"
+                onClick={() => setActiveTrendTab("addition")}
+              >
+                Additions
+              </button>
+              <button
+                className={activeTrendTab === "deleted" ? "active" : ""}
+                type="button"
+                onClick={() => setActiveTrendTab("deleted")}
+              >
+                Deletions
+              </button>
+            </div>
+            <TrendList
+              rows={activeTrendRows}
+              emptyText={
+                isAdditionTrend ? "No addition trend yet." : "No deletion trend yet."
+              }
+              variant={isAdditionTrend ? "addition" : "deleted"}
+            />
           </section>
 
           <section className="panel section">
@@ -1609,6 +1659,104 @@ function App() {
                 users={filteredUserList}
                 loading={usersLoading}
               />
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isNewUsersOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-users-title"
+          >
+            <div className="modal-header">
+              <div>
+                <h2 id="new-users-title">New Additions</h2>
+                <p>Users added on the selected dashboard date.</p>
+              </div>
+              <div className="modal-actions">
+                <strong className="list-count">{newUsersList.length}</strong>
+                <button
+                  className="icon-button close-button"
+                  type="button"
+                  onClick={() => setIsNewUsersOpen(false)}
+                  title="Close"
+                >
+                  <X size={18} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+
+            <div className="scroll-panel modal-scroll">
+              <table className="deleted-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>User ID</th>
+                    <th>Full Name</th>
+                    <th>Target Classification</th>
+                    <th>Added Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {newUsersList.map((user) => (
+                    <tr key={`${user.username}-${user.added_date}`}>
+                      <td>{user.username}</td>
+                      <td>{user.user_id || "-"}</td>
+                      <td>{user.full_name || "-"}</td>
+                      <td>{user.category || "Unclassified"}</td>
+                      <td>{formatDate(user.added_date)}</td>
+                    </tr>
+                  ))}
+
+                  {!newUsersLoading && newUsersList.length === 0 ? (
+                    <tr>
+                      <td className="empty-table-cell" colSpan="5">
+                        No new additions for this date.
+                      </td>
+                    </tr>
+                  ) : null}
+
+                  {newUsersLoading ? (
+                    <tr>
+                      <td className="empty-table-cell" colSpan="5">
+                        Loading new additions...
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isDeletedUsersOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <div>
+                <h2>Deleted Users</h2>
+                <p>Users removed on the selected dashboard date.</p>
+              </div>
+              <div className="modal-actions">
+                <strong className="list-count">{dashboard?.deleted_users?.length ?? 0}</strong>
+                <button
+                  className="icon-button close-button"
+                  type="button"
+                  onClick={() => setIsDeletedUsersOpen(false)}
+                  title="Close"
+                >
+                  <X size={18} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+
+            <div className="scroll-panel modal-scroll">
+              <DeletedUsersTable users={dashboard?.deleted_users ?? []} />
             </div>
           </section>
         </div>
