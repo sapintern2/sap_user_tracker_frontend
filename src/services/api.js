@@ -193,6 +193,11 @@ export function getCurrentUsers(category, statsDate) {
   return request(`/dashboard/users${query ? `?${query}` : ""}`);
 }
 
+export function getNewUsers(statsDate) {
+  const params = statsDate ? `?stats_date=${statsDate}` : "";
+  return request(`/dashboard/new-users${params}`);
+}
+
 export function getClassificationMovements(fromCategory, toCategory, statsDate) {
   const params = new URLSearchParams();
   if (fromCategory) {

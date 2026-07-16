@@ -216,8 +216,22 @@ button {
 }
 
 .danger-icon-button {
+  border-color: rgba(220, 71, 84, 0.55);
   color: #ffffff;
   background: linear-gradient(135deg, var(--danger), #c84a54);
+}
+
+.danger-icon-button:hover:not(:disabled) {
+  border-color: rgba(220, 71, 84, 0.72);
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--danger), #c84a54);
+}
+
+.upload-actions .danger-icon-button:disabled {
+  border-color: rgba(220, 71, 84, 0.55);
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--danger), #c84a54);
+  opacity: 0.65;
 }
 
 .admin-button {
@@ -429,7 +443,7 @@ button.matrix-cell.active {
     transform 160ms ease;
 }
 
-.stat-card:nth-child(5) {
+.stat-card.deletions {
   border-color: #f3c4cb;
   background: linear-gradient(180deg, #ffffff, #fff6f7);
 }
@@ -454,7 +468,7 @@ button.matrix-cell.active {
   line-height: 1;
 }
 
-.stat-card:nth-child(5) strong {
+.stat-card.deletions strong {
   color: var(--danger);
 }
 
@@ -992,6 +1006,35 @@ button.matrix-cell.active {
   list-style: none;
 }
 
+.trend-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--soft);
+}
+
+.trend-tabs button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.trend-tabs button.active {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--danger), #c84a54);
+}
+
+.trend-tabs button.active.addition-tab {
+  background: linear-gradient(135deg, #168449, #24a665);
+}
+
 .upload-history-list {
   display: grid;
   gap: 8px;
@@ -1004,7 +1047,7 @@ button.matrix-cell.active {
 
 .upload-history-item {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) 150px 160px;
+  grid-template-columns: minmax(0, 1.4fr) 150px 96px;
   gap: 12px;
   align-items: center;
   border: 1px solid #e5ece9;
@@ -1048,6 +1091,12 @@ button.matrix-cell.active {
   min-height: 30px;
   padding: 0 9px;
   font-size: 12px;
+}
+
+.upload-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .report-download {
@@ -1226,6 +1275,10 @@ button.matrix-cell.active {
   background: linear-gradient(90deg, var(--accent), #e0a24f);
 }
 
+.bar.addition-bar span {
+  background: linear-gradient(90deg, #24a665, #7edba5);
+}
+
 @media (max-width: 920px) {
   .main-grid {
     grid-template-columns: 1fr;
@@ -1315,7 +1368,7 @@ button.matrix-cell.active {
   background: rgba(23, 33, 47, 0.9);
 }
 
-:root[data-theme="dark"] .stat-card:nth-child(5) {
+:root[data-theme="dark"] .stat-card.deletions {
   border-color: rgba(251, 113, 133, 0.42);
   background: linear-gradient(180deg, #17212f, #231722);
 }
@@ -1357,4 +1410,66 @@ button.matrix-cell.active {
 
 :root[data-theme="dark"] .message.success {
   border-color: #1d5b53;
+}
+
+.upload-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--soft);
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.upload-meta:hover {
+  border-color: rgba(15, 94, 120, 0.34);
+  box-shadow: 0 12px 28px rgba(15, 94, 120, 0.1);
+  transform: translateY(-1px);
+}
+
+.upload-meta span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.upload-meta strong {
+  color: var(--brand);
+  font-size: 20px;
+}
+
+.stat-card.additions {
+  border-color: #9fd6b5;
+  background: linear-gradient(180deg, #f1fbf5, #ffffff);
+}
+
+.stat-card.additions strong {
+  color: #168449;
+}
+
+:root[data-theme="dark"] .stat-card.additions {
+  border-color: rgba(52, 211, 153, 0.42);
+  background: linear-gradient(180deg, #13251e, #17211f);
+}
+
+:root[data-theme="dark"] .stat-card.additions strong {
+  color: #5ee1a8;
+}
+
+.new-pill {
+  display: inline-flex;
+  border-radius: 999px;
+  color: #168449;
+  background: #dcfce7;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 800;
 }
