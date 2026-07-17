@@ -252,3 +252,9 @@ export function uploadExcel(file, uploadDate) {
     body: formData,
   });
 }
+
+export function uploadLatestFromFolder() {
+  return request("/upload/latest-from-folder", {
+    method: "POST",
+  });
+}
