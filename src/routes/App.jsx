@@ -7,6 +7,7 @@ import {
   Eye,
   X,
   Database,
+  Download,
   FileSpreadsheet,
   KeyRound,
   Lock,
@@ -47,6 +48,7 @@ import {
   storeSession,
   unblockAdminUser,
   uploadExcel,
+  uploadLatestFromFolder,
 } from "../services/api";
 
 function today() {
@@ -419,14 +421,15 @@ function UploadHistoryList({ uploads, onDeleteUpload, onDownloadUpload, deleting
           </dl>
           <div className="upload-actions">
             <button
-              className="download-link compact-action"
+              className="icon-button"
               type="button"
               onClick={() => onDownloadUpload(upload)}
+              title="Download upload"
             >
-              Download
+              <Download size={16} aria-hidden="true" />
             </button>
             <button
-              className="danger-button compact-action"
+              className="icon-button danger-icon-button"
               type="button"
               onClick={() => onDeleteUpload(upload)}
               disabled={!upload.is_latest || deletingUploadId === upload.id}
@@ -437,7 +440,6 @@ function UploadHistoryList({ uploads, onDeleteUpload, onDownloadUpload, deleting
               }
             >
               <Trash2 size={15} aria-hidden="true" />
-              {deletingUploadId === upload.id ? "Deleting" : "Delete"}
             </button>
           </div>
         </li>
@@ -954,6 +956,7 @@ function App() {
     clearLoginsPending,
     isLogoutConfirmOpen,
     isDeletedUsersOpen,
+    isNewUsersOpen,
   ]);
 
   const loadAdminData = useCallback(async (tab) => {
@@ -1204,6 +1207,25 @@ function App() {
         text: `Uploaded ${result.total_users} users. Deleted users detected: ${result.deleted_users}.`,
       });
       setSelectedFile(null);
+      await loadDashboard();
+      await loadUploadHistory();
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleUploadLatestFromFolder() {
+    setUploading(true);
+    setMessage(null);
+
+    try {
+      const result = await uploadLatestFromFolder();
+      setMessage({
+        type: "success",
+        text: `Synced ${result.uploaded_count} SAP export file(s). Latest: ${result.last_file}. Users: ${result.total_users}. Deleted: ${result.deleted_users}. Newly added: ${result.new_users}.`,
+      });
       await loadDashboard();
       await loadUploadHistory();
     } catch (error) {
@@ -1528,10 +1550,10 @@ function App() {
               <Upload size={20} aria-hidden="true" />
             </div>
 
-            <div className="upload-meta">
+            <button className="upload-meta" type="button" onClick={openUploadHistory}>
               <span>Total Uploads</span>
               <strong>{summary.total_uploads ?? 0}</strong>
-            </div>
+            </button>
 
             <form className="upload-form" onSubmit={handleUpload}>
               <div className="field">
@@ -1555,9 +1577,19 @@ function App() {
                 />
               </div>
 
-            <button className="primary-button" type="submit" disabled={uploading}>
+              <button className="primary-button" type="submit" disabled={uploading}>
                 <Upload size={18} aria-hidden="true" />
                 {uploading ? "Uploading" : "Upload"}
+              </button>
+
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={handleUploadLatestFromFolder}
+                disabled={uploading}
+              >
+                <Upload size={18} aria-hidden="true" />
+                Sync SAP Exports
               </button>
             </form>
 
