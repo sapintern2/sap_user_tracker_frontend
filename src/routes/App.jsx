@@ -35,6 +35,7 @@ import {
   getAdminUsers,
   getClassificationMovements,
   getDashboard,
+  getDeletedUsers,
   getMe,
   getNewUsers,
   getStoredToken,
@@ -870,6 +871,8 @@ function App() {
   const [newUsersSearch, setNewUsersSearch] = useState("");
   const [newUsersCategory, setNewUsersCategory] = useState("all");
   const [isDeletedUsersOpen, setIsDeletedUsersOpen] = useState(false);
+  const [deletedUsersList, setDeletedUsersList] = useState([]);
+  const [deletedUsersLoading, setDeletedUsersLoading] = useState(false);
   const [deletedUsersSearch, setDeletedUsersSearch] = useState("");
   const [deletedUsersCategory, setDeletedUsersCategory] = useState("all");
   const [userList, setUserList] = useState({
@@ -934,7 +937,7 @@ function App() {
   );
 
   const filteredDeletedUsers = filterBySearchAndCategory(
-    dashboard?.deleted_users ?? [],
+    deletedUsersList,
     deletedUsersSearch,
     deletedUsersCategory
   );
@@ -1301,8 +1304,20 @@ function App() {
     }
   }
 
-  function openDeletedUsers() {
-    setIsDeletedUsersOpen(true);
+  async function openDeletedUsers() {
+    setDeletedUsersLoading(true);
+    setMessage(null);
+    try {
+      const data = await getDeletedUsers(selectedDate || statsDate);
+      setDeletedUsersList(data.users ?? []);
+      setDeletedUsersSearch("");
+      setDeletedUsersCategory("all");
+      setIsDeletedUsersOpen(true);
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally {
+      setDeletedUsersLoading(false);
+    }
   }
 
   async function openNewUsers() {
@@ -1867,7 +1882,11 @@ function App() {
             </div>
 
             <div className="scroll-panel modal-scroll">
-              <DeletedUsersTable users={filteredDeletedUsers} />
+              {deletedUsersLoading ? (
+                <div className="empty-state">Loading deleted users...</div>
+              ) : (
+                <DeletedUsersTable users={filteredDeletedUsers} />
+              )}
             </div>
           </section>
         </div>
