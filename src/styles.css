@@ -562,6 +562,65 @@ button.matrix-cell.active {
   margin-bottom: 12px;
 }
 
+.filter-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.42fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--soft), var(--panel));
+  padding: 12px;
+}
+
+.filter-search,
+.filter-select {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filter-select > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.filter-toolbar .search-input,
+.filter-toolbar select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #bfd3cf;
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--ink);
+  padding: 8px 10px;
+}
+
+.filter-toolbar .search-input:focus,
+.filter-toolbar select:focus {
+  outline: 2px solid color-mix(in srgb, var(--brand) 32%, transparent);
+  outline-offset: 1px;
+  border-color: var(--brand);
+}
+
+.filter-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  border-radius: 7px;
+  color: var(--brand-strong);
+  background: var(--brand-soft);
+  padding: 0 13px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .search-input {
   width: 100%;
   min-height: 40px;
@@ -1318,6 +1377,15 @@ button.matrix-cell.active {
   .admin-filter-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .filter-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .filter-count {
+    justify-content: center;
   }
 
   .admin-tabs,

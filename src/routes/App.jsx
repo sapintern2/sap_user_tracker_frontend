@@ -7,13 +7,13 @@ import {
   Eye,
   X,
   Database,
-  Download,
   FileSpreadsheet,
   KeyRound,
   Lock,
   LogOut,
   Moon,
   RefreshCw,
+  SlidersHorizontal,
   Sun,
   Trash2,
   Upload,
@@ -48,7 +48,6 @@ import {
   storeSession,
   unblockAdminUser,
   uploadExcel,
-  uploadLatestFromFolder,
 } from "../services/api";
 
 function today() {
@@ -332,6 +331,40 @@ function filterMovements(users, searchTerm) {
   );
 }
 
+function getCategoryKey(category) {
+  const value = (category || "").trim().toLowerCase();
+
+  if (value.includes("advanced")) {
+    return "advanced_users";
+  }
+  if (value.includes("core")) {
+    return "core_users";
+  }
+  if (value.includes("self-service") || value.includes("self service")) {
+    return "self_service_users";
+  }
+
+  return "other_users";
+}
+
+function filterBySearchAndCategory(users, searchTerm, classification) {
+  const term = searchTerm.trim().toLowerCase();
+
+  return users.filter((user) => {
+    const matchesSearch =
+      !term ||
+      (user.username || "").toLowerCase().includes(term) ||
+      (user.user_id || "").toLowerCase().includes(term) ||
+      (user.full_name || "").toLowerCase().includes(term);
+
+    const matchesClassification =
+      classification === "all" ||
+      getCategoryKey(user.category) === classification;
+
+    return matchesSearch && matchesClassification;
+  });
+}
+
 function DeletedUsersTable({ users }) {
   if (!users?.length) {
     return <div className="empty-state">No deleted users for this date.</div>;
@@ -421,15 +454,14 @@ function UploadHistoryList({ uploads, onDeleteUpload, onDownloadUpload, deleting
           </dl>
           <div className="upload-actions">
             <button
-              className="icon-button"
+              className="download-link compact-action"
               type="button"
               onClick={() => onDownloadUpload(upload)}
-              title="Download upload"
             >
-              <Download size={16} aria-hidden="true" />
+              Download
             </button>
             <button
-              className="icon-button danger-icon-button"
+              className="danger-button compact-action"
               type="button"
               onClick={() => onDeleteUpload(upload)}
               disabled={!upload.is_latest || deletingUploadId === upload.id}
@@ -440,6 +472,7 @@ function UploadHistoryList({ uploads, onDeleteUpload, onDownloadUpload, deleting
               }
             >
               <Trash2 size={15} aria-hidden="true" />
+              {deletingUploadId === upload.id ? "Deleting" : "Delete"}
             </button>
           </div>
         </li>
@@ -834,7 +867,11 @@ function App() {
   const [newUsersList, setNewUsersList] = useState([]);
   const [isNewUsersOpen, setIsNewUsersOpen] = useState(false);
   const [newUsersLoading, setNewUsersLoading] = useState(false);
+  const [newUsersSearch, setNewUsersSearch] = useState("");
+  const [newUsersCategory, setNewUsersCategory] = useState("all");
   const [isDeletedUsersOpen, setIsDeletedUsersOpen] = useState(false);
+  const [deletedUsersSearch, setDeletedUsersSearch] = useState("");
+  const [deletedUsersCategory, setDeletedUsersCategory] = useState("all");
   const [userList, setUserList] = useState({
     title: "Total Users",
     category: null,
@@ -889,6 +926,18 @@ function App() {
     await loadUploadHistory();
     setIsUploadHistoryOpen(true);
   }, [loadUploadHistory]);
+
+  const filteredNewUsers = filterBySearchAndCategory(
+    newUsersList,
+    newUsersSearch,
+    newUsersCategory
+  );
+
+  const filteredDeletedUsers = filterBySearchAndCategory(
+    dashboard?.deleted_users ?? [],
+    deletedUsersSearch,
+    deletedUsersCategory
+  );
 
   useEffect(() => {
     if (!getStoredToken()) {
@@ -956,7 +1005,6 @@ function App() {
     clearLoginsPending,
     isLogoutConfirmOpen,
     isDeletedUsersOpen,
-    isNewUsersOpen,
   ]);
 
   const loadAdminData = useCallback(async (tab) => {
@@ -1204,28 +1252,9 @@ function App() {
       const result = await uploadExcel(selectedFile, uploadDate);
       setMessage({
         type: "success",
-        text: `Uploaded ${result.total_users} users. Deleted users detected: ${result.deleted_users}.`,
+        text: `Auto uploaded ${result.file_name}. Users: ${result.total_users}. Deleted: ${result.deleted_users}. Newly added: ${result.new_users}.`,
       });
       setSelectedFile(null);
-      await loadDashboard();
-      await loadUploadHistory();
-    } catch (error) {
-      setMessage({ type: "error", text: error.message });
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function handleUploadLatestFromFolder() {
-    setUploading(true);
-    setMessage(null);
-
-    try {
-      const result = await uploadLatestFromFolder();
-      setMessage({
-        type: "success",
-        text: `Synced ${result.uploaded_count} SAP export file(s). Latest: ${result.last_file}. Users: ${result.total_users}. Deleted: ${result.deleted_users}. Newly added: ${result.new_users}.`,
-      });
       await loadDashboard();
       await loadUploadHistory();
     } catch (error) {
@@ -1550,10 +1579,10 @@ function App() {
               <Upload size={20} aria-hidden="true" />
             </div>
 
-            <button className="upload-meta" type="button" onClick={openUploadHistory}>
+            <div className="upload-meta">
               <span>Total Uploads</span>
               <strong>{summary.total_uploads ?? 0}</strong>
-            </button>
+            </div>
 
             <form className="upload-form" onSubmit={handleUpload}>
               <div className="field">
@@ -1577,19 +1606,9 @@ function App() {
                 />
               </div>
 
-              <button className="primary-button" type="submit" disabled={uploading}>
+            <button className="primary-button" type="submit" disabled={uploading}>
                 <Upload size={18} aria-hidden="true" />
                 {uploading ? "Uploading" : "Upload"}
-              </button>
-
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={handleUploadLatestFromFolder}
-                disabled={uploading}
-              >
-                <Upload size={18} aria-hidden="true" />
-                Sync SAP Exports
               </button>
             </form>
 
@@ -1710,7 +1729,6 @@ function App() {
                 <p>Users added on the selected dashboard date.</p>
               </div>
               <div className="modal-actions">
-                <strong className="list-count">{newUsersList.length}</strong>
                 <button
                   className="icon-button close-button"
                   type="button"
@@ -1720,6 +1738,37 @@ function App() {
                   <X size={18} aria-hidden="true" />
                 </button>
               </div>
+            </div>
+
+            <div className="filter-toolbar">
+              <label className="filter-search" htmlFor="new-users-search">
+                <span>Search users</span>
+                <input
+                  id="new-users-search"
+                  className="search-input"
+                  type="search"
+                  placeholder="Name, user ID, or username"
+                  value={newUsersSearch}
+                  onChange={(e) => setNewUsersSearch(e.target.value)}
+                />
+              </label>
+              <label className="filter-select" htmlFor="new-users-classification">
+                <span><SlidersHorizontal size={14} aria-hidden="true" /> Classification</span>
+                <select
+                  id="new-users-classification"
+                  value={newUsersCategory}
+                  onChange={(e) => setNewUsersCategory(e.target.value)}
+                >
+                  <option value="all">All classifications</option>
+                  <option value="advanced_users">Advanced Users</option>
+                  <option value="core_users">Core Users</option>
+                  <option value="self_service_users">Self-Service Users</option>
+                  <option value="other_users">Not classified</option>
+                </select>
+              </label>
+              <strong className="filter-count" aria-live="polite">
+                {filteredNewUsers.length} {filteredNewUsers.length === 1 ? "user" : "users"}
+              </strong>
             </div>
 
             <div className="scroll-panel modal-scroll">
@@ -1734,7 +1783,7 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {newUsersList.map((user) => (
+                  {filteredNewUsers.map((user) => (
                     <tr key={`${user.username}-${user.added_date}`}>
                       <td>{user.username}</td>
                       <td>{user.user_id || "-"}</td>
@@ -1775,7 +1824,6 @@ function App() {
                 <p>Users removed on the selected dashboard date.</p>
               </div>
               <div className="modal-actions">
-                <strong className="list-count">{dashboard?.deleted_users?.length ?? 0}</strong>
                 <button
                   className="icon-button close-button"
                   type="button"
@@ -1787,8 +1835,39 @@ function App() {
               </div>
             </div>
 
+            <div className="filter-toolbar">
+              <label className="filter-search" htmlFor="deleted-users-search">
+                <span>Search users</span>
+                <input
+                  id="deleted-users-search"
+                  className="search-input"
+                  type="search"
+                  placeholder="Name, user ID, or username"
+                  value={deletedUsersSearch}
+                  onChange={(e) => setDeletedUsersSearch(e.target.value)}
+                />
+              </label>
+              <label className="filter-select" htmlFor="deleted-users-classification">
+                <span><SlidersHorizontal size={14} aria-hidden="true" /> Classification</span>
+                <select
+                  id="deleted-users-classification"
+                  value={deletedUsersCategory}
+                  onChange={(e) => setDeletedUsersCategory(e.target.value)}
+                >
+                  <option value="all">All classifications</option>
+                  <option value="advanced_users">Advanced Users</option>
+                  <option value="core_users">Core Users</option>
+                  <option value="self_service_users">Self-Service Users</option>
+                  <option value="other_users">Not classified</option>
+                </select>
+              </label>
+              <strong className="filter-count" aria-live="polite">
+                {filteredDeletedUsers.length} {filteredDeletedUsers.length === 1 ? "user" : "users"}
+              </strong>
+            </div>
+
             <div className="scroll-panel modal-scroll">
-              <DeletedUsersTable users={dashboard?.deleted_users ?? []} />
+              <DeletedUsersTable users={filteredDeletedUsers} />
             </div>
           </section>
         </div>
