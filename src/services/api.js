@@ -239,13 +239,9 @@ export function deleteUpload(uploadId) {
   });
 }
 
-export function uploadExcel(file, uploadDate) {
+export function uploadExcel(file) {
   const formData = new FormData();
   formData.append("file", file);
-
-  if (uploadDate) {
-    formData.append("upload_date", uploadDate);
-  }
 
   return request("/upload", {
     method: "POST",

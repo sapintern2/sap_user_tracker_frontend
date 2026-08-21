@@ -2,11 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Ban,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   ArrowRight,
   Shield,
   Eye,
   X,
   Database,
+  Download,
   FileSpreadsheet,
   KeyRound,
   Lock,
@@ -49,6 +52,7 @@ import {
   storeSession,
   unblockAdminUser,
   uploadExcel,
+  uploadLatestFromFolder,
 } from "../services/api";
 
 function today() {
@@ -212,6 +216,148 @@ function DateField({ value, onChange, max, id }) {
         onChange={(event) => onChange(event.target.value)}
         tabIndex={-1}
       />
+    </div>
+  );
+}
+
+function ExportCalendar({ uploads, onSelectDate }) {
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const hasSelectedInitialMonth = useRef(false);
+  const uploadedDates = useMemo(
+    () => new Set((uploads || []).map((upload) => upload.upload_date?.slice(0, 10))),
+    [uploads],
+  );
+
+  useEffect(() => {
+    if (hasSelectedInitialMonth.current || !uploads?.length) {
+      return;
+    }
+
+    const latestDate = uploads
+      .map((upload) => upload.upload_date?.slice(0, 10))
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+    if (latestDate) {
+      const [year, month] = latestDate.split("-").map(Number);
+      setVisibleMonth({ year, month: month - 1 });
+    }
+    hasSelectedInitialMonth.current = true;
+  }, [uploads]);
+
+  const firstDay = new Date(visibleMonth.year, visibleMonth.month, 1).getDay();
+  const daysInMonth = new Date(visibleMonth.year, visibleMonth.month + 1, 0).getDate();
+  const monthLabel = new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(visibleMonth.year, visibleMonth.month, 1));
+
+  function changeMonth(offset) {
+    setVisibleMonth(({ year, month }) => {
+      const next = new Date(year, month + offset, 1);
+      return { year: next.getFullYear(), month: next.getMonth() };
+    });
+  }
+
+  return (
+    <section className="export-calendar" aria-label="SAP export calendar">
+      <div className="export-calendar-header">
+        <div>
+          <strong>SAP export calendar</strong>
+          <span>Highlighted dates have an uploaded file.</span>
+        </div>
+        <div className="export-calendar-nav">
+          <button type="button" className="icon-button" onClick={() => changeMonth(-1)} title="Previous month">
+            <ChevronLeft size={17} aria-hidden="true" />
+          </button>
+          <strong>{monthLabel}</strong>
+          <button type="button" className="icon-button" onClick={() => changeMonth(1)} title="Next month">
+            <ChevronRight size={17} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <div className="export-calendar-weekdays" aria-hidden="true">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <span key={day}>{day}</span>)}
+      </div>
+      <div className="export-calendar-days">
+        {Array.from({ length: firstDay }, (_, index) => <span key={`blank-${index}`} />)}
+        {Array.from({ length: daysInMonth }, (_, index) => {
+          const day = index + 1;
+          const date = `${visibleMonth.year}-${String(visibleMonth.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const hasExport = uploadedDates.has(date);
+          return (
+            <button
+              key={date}
+              className={`export-calendar-day${hasExport ? " has-export" : ""}`}
+              type="button"
+              disabled={!hasExport}
+              onClick={() => onSelectDate(date)}
+              title={hasExport ? `View SAP export for ${formatDate(date)}` : "No SAP export on this date"}
+            >
+              {day}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ExportDatePicker({ value, onChange, uploads }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const pickerRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    function closeWhenClickingOutside(event) {
+      if (!pickerRef.current?.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeWhenClickingOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeWhenClickingOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="date-field export-date-picker" ref={pickerRef}>
+      <button
+        className="date-display"
+        type="button"
+        onClick={() => setIsOpen((open) => !open)}
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+      >
+        <CalendarDays size={16} aria-hidden="true" />
+        <span>{formatDate(value) || "dd/mm/yy"}</span>
+      </button>
+      {isOpen ? (
+        <div className="export-calendar-popup" role="dialog" aria-label="Select an SAP export date">
+          <ExportCalendar
+            uploads={uploads}
+            onSelectDate={(date) => {
+              onChange(date);
+              setIsOpen(false);
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -455,14 +601,16 @@ function UploadHistoryList({ uploads, onDeleteUpload, onDownloadUpload, deleting
           </dl>
           <div className="upload-actions">
             <button
-              className="download-link compact-action"
+              className="icon-button"
               type="button"
               onClick={() => onDownloadUpload(upload)}
+              title={`Download ${upload.file_name}`}
+              aria-label={`Download ${upload.file_name}`}
             >
-              Download
+              <Download size={16} aria-hidden="true" />
             </button>
             <button
-              className="danger-button compact-action"
+              className="icon-button danger-icon-button"
               type="button"
               onClick={() => onDeleteUpload(upload)}
               disabled={!upload.is_latest || deletingUploadId === upload.id}
@@ -471,9 +619,9 @@ function UploadHistoryList({ uploads, onDeleteUpload, onDownloadUpload, deleting
                   ? "Delete this latest upload and revert"
                   : "Only the latest upload can be deleted"
               }
+              aria-label={upload.is_latest ? `Delete ${upload.file_name}` : "Only the latest upload can be deleted"}
             >
               <Trash2 size={15} aria-hidden="true" />
-              {deletingUploadId === upload.id ? "Deleting" : "Delete"}
             </button>
           </div>
         </li>
@@ -861,7 +1009,6 @@ function App() {
   const [statsDate, setStatsDate] = useState("");
   const [dashboard, setDashboard] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [uploadDate, setUploadDate] = useState(today());
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
@@ -1252,12 +1399,30 @@ function App() {
     setUploading(true);
     setMessage(null);
     try {
-      const result = await uploadExcel(selectedFile, uploadDate);
+      const result = await uploadExcel(selectedFile);
       setMessage({
         type: "success",
         text: `Auto uploaded ${result.file_name}. Users: ${result.total_users}. Deleted: ${result.deleted_users}. Newly added: ${result.new_users}.`,
       });
       setSelectedFile(null);
+      await loadDashboard();
+      await loadUploadHistory();
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleUploadLatestFromFolder() {
+    setUploading(true);
+    setMessage(null);
+    try {
+      const result = await uploadLatestFromFolder();
+      setMessage({
+        type: "success",
+        text: `Synced ${result.uploaded_count} SAP export file(s). Latest: ${result.last_file}. Users: ${result.total_users}. Deleted: ${result.deleted_users}. Newly added: ${result.new_users}.`,
+      });
       await loadDashboard();
       await loadUploadHistory();
     } catch (error) {
@@ -1308,7 +1473,7 @@ function App() {
     setDeletedUsersLoading(true);
     setMessage(null);
     try {
-      const data = await getDeletedUsers(selectedDate || statsDate);
+      const data = await getDeletedUsers(statsDate || selectedDate);
       setDeletedUsersList(data.users ?? []);
       setDeletedUsersSearch("");
       setDeletedUsersCategory("all");
@@ -1340,7 +1505,9 @@ function App() {
   }
 
   function resetDashboardDate() {
-    setStatsDate(latestUpload?.upload_date ?? today());
+    const latestDate = latestUpload?.upload_date ?? today();
+    setSelectedDate(latestDate);
+    setStatsDate(latestDate);
   }
 
   const summary = dashboard?.summary ?? {};
@@ -1448,10 +1615,13 @@ function App() {
                 </p>
               </div>
               <div className="controls">
-                <DateField
+                <ExportDatePicker
                   value={statsDate}
-                  onChange={setStatsDate}
-                  max={latestUpload?.upload_date ?? undefined}
+                  onChange={(date) => {
+                    setSelectedDate(date);
+                    setStatsDate(date);
+                  }}
+                  uploads={uploadHistory}
                 />
                 <button
                   className="icon-button"
@@ -1594,23 +1764,23 @@ function App() {
               <Upload size={20} aria-hidden="true" />
             </div>
 
-            <div className="upload-meta">
+            <button
+              className="upload-meta"
+              type="button"
+              onClick={openUploadHistory}
+              title="View uploaded SAP export files"
+            >
               <span>Total Uploads</span>
               <strong>{summary.total_uploads ?? 0}</strong>
-            </div>
+            </button>
 
             <form className="upload-form" onSubmit={handleUpload}>
-              <div className="field">
-                <label htmlFor="upload-date">Upload date</label>
-                <DateField id="upload-date" value={uploadDate} onChange={setUploadDate} />
-              </div>
-
               <div className="field">
                 <label htmlFor="sap-file">SAP export</label>
                 <label className="file-drop" htmlFor="sap-file">
                   <FileSpreadsheet size={22} aria-hidden="true" />
                   <span>{selectedFile ? selectedFile.name : "Choose Excel file"}</span>
-                  <small>.xlsx or .xls</small>
+                  <small>Must include EXPORT_YYYYMMDD_HHMMSS</small>
                 </label>
                 <input
                   id="sap-file"
@@ -1621,9 +1791,18 @@ function App() {
                 />
               </div>
 
-            <button className="primary-button" type="submit" disabled={uploading}>
+              <button className="primary-button" type="submit" disabled={uploading}>
                 <Upload size={18} aria-hidden="true" />
                 {uploading ? "Uploading" : "Upload"}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={handleUploadLatestFromFolder}
+                disabled={uploading}
+              >
+                <RefreshCw size={18} aria-hidden="true" />
+                {uploading ? "Syncing" : "Sync SAP Exports"}
               </button>
             </form>
 
@@ -1836,7 +2015,7 @@ function App() {
             <div className="modal-header">
               <div>
                 <h2>Deleted Users</h2>
-                <p>Users removed on the selected dashboard date.</p>
+                <p>Users removed on {formatDate(statsDate || selectedDate)}.</p>
               </div>
               <div className="modal-actions">
                 <button
