@@ -213,6 +213,14 @@ export function getClassificationMovements(fromCategory, toCategory, statsDate) 
   return request(`/dashboard/movements${query ? `?${query}` : ""}`);
 }
 
+export function compareUploads(baseDate, compareDate) {
+  const params = new URLSearchParams({
+    base_date: baseDate,
+    compare_date: compareDate,
+  });
+  return request(`/dashboard/compare?${params}`);
+}
+
 export function getUploadHistory() {
   return request("/history/uploads");
 }
