@@ -521,6 +521,199 @@ button.matrix-cell.active {
   width: min(620px, 100%);
 }
 
+.comparison-modal {
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  gap: 14px;
+  border-color: #b9d9d2;
+  background:
+    radial-gradient(circle at 100% 0, rgba(57, 167, 141, 0.11), transparent 32%),
+    var(--panel);
+}
+
+.comparison-date-fields {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 12px;
+}
+
+.comparison-date-fields label,
+.comparison-summary button {
+  display: grid;
+  gap: 5px;
+}
+
+.comparison-date-fields label {
+  position: relative;
+  border-radius: 7px;
+  padding: 7px 8px 8px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.comparison-date-fields span,
+.comparison-summary span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.comparison-date-fields select {
+  min-height: 40px;
+  border: 1px solid #bfd3cf;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 8px 10px;
+}
+
+.comparison-date-fields-inline {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  border: 1px solid #d7e8e3;
+  border-radius: 9px;
+  background: rgba(238, 248, 245, 0.72);
+  padding: 12px;
+}
+
+.comparison-refresh {
+  min-height: 40px;
+}
+
+.comparison-arrow {
+  margin-bottom: 9px;
+  color: var(--brand);
+  filter: drop-shadow(0 3px 4px rgba(20, 104, 88, 0.2));
+}
+
+.comparison-summary {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.comparison-summary button {
+  display: grid;
+  width: 100%;
+  border: 1px solid var(--line);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: linear-gradient(145deg, #ffffff, #eef8f5);
+  color: var(--ink);
+  padding: 10px;
+  box-shadow: 0 3px 9px rgba(28, 89, 76, 0.06);
+  text-align: left;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.comparison-summary button:nth-child(3) {
+  border-color: #a9dcca;
+  background: linear-gradient(145deg, #ffffff, #e9f8f1);
+}
+
+.comparison-summary button:nth-child(4) {
+  border-color: #f1c99d;
+  background: linear-gradient(145deg, #ffffff, #fff4e7);
+}
+
+.comparison-summary button:nth-child(5) {
+  border-color: #c9c1f1;
+  background: linear-gradient(145deg, #ffffff, #f1efff);
+}
+
+.comparison-summary strong {
+  font-size: 19px;
+}
+
+.comparison-summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.comparison-summary button:hover,
+.comparison-summary button.active {
+  border-color: var(--brand);
+  box-shadow: 0 6px 16px rgba(28, 89, 76, 0.16);
+  transform: translateY(-2px);
+}
+
+.comparison-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.comparison-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 10px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.comparison-tabs button.active {
+  border-bottom-color: var(--brand);
+  color: var(--brand);
+}
+
+.comparison-tabs button:hover {
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.comparison-list-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  padding: 8px 10px;
+}
+
+.comparison-list-toolbar label,
+.comparison-list-toolbar strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.comparison-list-toolbar input {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid #bfd3cf;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  padding: 7px 9px;
+}
+
+.comparison-empty-state {
+  min-height: 190px;
+}
+
+@media (max-width: 680px) {
+  .comparison-date-fields-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .comparison-arrow {
+    display: none;
+  }
+
+  .comparison-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .comparison-list-toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-backdrop {
   align-items: center;
 }
@@ -1296,6 +1489,17 @@ button.matrix-cell.active {
 .export-calendar-day.has-export:hover {
   transform: translateY(-1px);
   filter: brightness(1.08);
+}
+
+.export-calendar-day.is-today {
+  color: #374151;
+  background: #d1d5db;
+  box-shadow: inset 0 0 0 1px #9ca3af;
+  font-weight: 800;
+}
+
+.export-calendar-day.is-today:hover {
+  filter: brightness(0.96);
 }
 
 .danger-button {

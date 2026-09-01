@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Ban,
   CalendarDays,
+  GitCompareArrows,
   ChevronLeft,
   ChevronRight,
   ArrowRight,
@@ -30,6 +31,7 @@ import {
   changePassword,
   clearAdminLogins,
   clearSession,
+  compareUploads,
   blockAdminUser,
   createAdminUser,
   deleteAdminUser,
@@ -221,6 +223,8 @@ function DateField({ value, onChange, max, id }) {
 }
 
 function ExportCalendar({ uploads, onSelectDate }) {
+  const today = new Date();
+  const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -288,14 +292,16 @@ function ExportCalendar({ uploads, onSelectDate }) {
           const day = index + 1;
           const date = `${visibleMonth.year}-${String(visibleMonth.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const hasExport = uploadedDates.has(date);
+          const isToday = date === todayDate;
           return (
             <button
               key={date}
-              className={`export-calendar-day${hasExport ? " has-export" : ""}`}
+              className={`export-calendar-day${hasExport ? " has-export" : ""}${isToday ? " is-today" : ""}`}
               type="button"
               disabled={!hasExport}
               onClick={() => onSelectDate(date)}
-              title={hasExport ? `View SAP export for ${formatDate(date)}` : "No SAP export on this date"}
+              aria-current={isToday ? "date" : undefined}
+              title={hasExport ? `View SAP export for ${formatDate(date)}` : isToday ? "Today — no SAP export" : "No SAP export on this date"}
             >
               {day}
             </button>
@@ -359,6 +365,28 @@ function ExportDatePicker({ value, onChange, uploads }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function CompareUsersTable({ users, type }) {
+  if (!users?.length) return <div className="empty-state compact">No {type} users.</div>;
+  if (type === "changed") {
+    return (
+      <table className="deleted-table">
+        <thead><tr><th>User</th><th>ID</th><th>Name</th><th>Previous classification</th><th>New classification</th><th>Other changes</th></tr></thead>
+        <tbody>{users.map((item) => <tr key={item.username}><td>{item.username}</td><td>{item.after.user_id || item.before.user_id || "-"}</td><td>{item.after.full_name || item.before.full_name || "-"}</td><td>{item.before.category || "Unclassified"}</td><td>{item.after.category || "Unclassified"}</td><td>{item.changed_fields.filter((field) => field !== "category").map((field) => `${field.replace("_", " ")}: ${item.before[field] || "-"} → ${item.after[field] || "-"}`).join("; ") || "-"}</td></tr>)}</tbody>
+      </table>
+    );
+  }
+  return (
+    <table className="deleted-table">
+      <thead><tr><th>User</th><th>ID</th><th>Name</th><th>{type === "changed" ? "Changes" : "Classification"}</th></tr></thead>
+      <tbody>{users.map((item) => {
+        const user = item;
+        const changes = user.category || "Unclassified";
+        return <tr key={user.username}><td>{user.username}</td><td>{user.user_id || "-"}</td><td>{user.full_name || "-"}</td><td>{changes}</td></tr>;
+      })}</tbody>
+    </table>
   );
 }
 
@@ -1045,6 +1073,13 @@ function App() {
   const [isUploadHistoryOpen, setIsUploadHistoryOpen] = useState(false);
   const [uploadPendingDelete, setUploadPendingDelete] = useState(null);
   const [deletingUploadId, setDeletingUploadId] = useState(null);
+  const [isComparePickerOpen, setIsComparePickerOpen] = useState(false);
+  const [baseCompareDate, setBaseCompareDate] = useState("");
+  const [targetCompareDate, setTargetCompareDate] = useState("");
+  const [comparison, setComparison] = useState(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonTab, setComparisonTab] = useState(null);
+  const [comparisonSearch, setComparisonSearch] = useState("");
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -1076,6 +1111,48 @@ function App() {
     await loadUploadHistory();
     setIsUploadHistoryOpen(true);
   }, [loadUploadHistory]);
+
+  function openComparePicker() {
+    const availableDates = uploadHistory.map((upload) => upload.upload_date).sort();
+    setBaseCompareDate(availableDates[0] || "");
+    setTargetCompareDate(availableDates.at(-1) || "");
+    setIsComparePickerOpen(true);
+  }
+
+  function selectBaseCompareDate(nextBaseDate) {
+    setBaseCompareDate(nextBaseDate);
+    if (nextBaseDate >= targetCompareDate) {
+      setTargetCompareDate(uploadHistory.map((upload) => upload.upload_date).sort().find((date) => date > nextBaseDate) || "");
+    }
+  }
+
+  function selectTargetCompareDate(nextTargetDate) {
+    setTargetCompareDate(nextTargetDate);
+    if (nextTargetDate <= baseCompareDate) {
+      setBaseCompareDate([...uploadHistory].map((upload) => upload.upload_date).sort().reverse().find((date) => date < nextTargetDate) || "");
+    }
+  }
+
+  async function handleCompareUploads() {
+    if (!baseCompareDate || !targetCompareDate) {
+      setMessage({ type: "error", text: "Choose two uploaded dates to compare." });
+      return;
+    }
+    setComparisonLoading(true);
+    try {
+      const result = await compareUploads(baseCompareDate, targetCompareDate);
+      setBaseCompareDate(result.base_upload.upload_date);
+      setTargetCompareDate(result.compare_upload.upload_date);
+      setComparison(result);
+      setComparisonTab(null);
+      setComparisonSearch("");
+      setIsComparePickerOpen(false);
+    } catch (error) {
+      setMessage({ type: "error", text: error.message });
+    } finally {
+      setComparisonLoading(false);
+    }
+  }
 
   const filteredNewUsers = filterBySearchAndCategory(
     newUsersList,
@@ -1518,6 +1595,21 @@ function App() {
   const activeTrendRows = isAdditionTrend
     ? dashboard?.new_user_trend ?? []
     : dashboard?.deleted_user_trend ?? [];
+  const activeComparisonUsers = !comparisonTab || !comparison
+    ? []
+    : comparisonTab === "base"
+      ? comparison.base_users
+      : comparisonTab === "compare"
+        ? comparison.compare_users
+        : comparison[comparisonTab];
+  const normalizedComparisonSearch = comparisonSearch.trim().toLowerCase();
+  const filteredComparisonUsers = normalizedComparisonSearch
+    ? activeComparisonUsers.filter((item) => {
+      const user = comparisonTab === "changed" ? { ...item.before, ...item.after } : item;
+      return [user.username, user.user_id, user.full_name, user.category, ...(item.changed_fields ?? [])]
+        .some((value) => String(value ?? "").toLowerCase().includes(normalizedComparisonSearch));
+    })
+    : activeComparisonUsers;
   const filteredUserList = filterUsers(userList.users, userSearch);
   const filteredMovementList = filterMovements(movementList.users, movementSearch);
 
@@ -1623,6 +1715,16 @@ function App() {
                   }}
                   uploads={uploadHistory}
                 />
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={openComparePicker}
+                  disabled={uploadHistory.length < 2}
+                  title={uploadHistory.length < 2 ? "Upload at least two exports to compare" : "Compare two SAP exports"}
+                  aria-label="Compare two SAP exports"
+                >
+                  <GitCompareArrows size={18} aria-hidden="true" />
+                </button>
                 <button
                   className="icon-button"
                   type="button"
@@ -2102,6 +2204,36 @@ function App() {
               onDownloadUpload={handleDownloadUpload}
               deletingUploadId={deletingUploadId}
             />
+          </section>
+        </div>
+      ) : null}
+
+      {isComparePickerOpen ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal compact-modal comparison-picker" role="dialog" aria-modal="true" aria-labelledby="compare-picker-title">
+            <div className="modal-header"><div><h2 id="compare-picker-title">Compare SAP exports</h2><p>Select a base export and a second export to see user changes.</p></div><button className="icon-button close-button" type="button" onClick={() => setIsComparePickerOpen(false)} title="Close"><X size={18} aria-hidden="true" /></button></div>
+            <div className="comparison-date-fields">
+              <label><span>Earlier snapshot</span><select value={baseCompareDate} onChange={(event) => selectBaseCompareDate(event.target.value)}>{[...uploadHistory].sort((a, b) => a.upload_date.localeCompare(b.upload_date)).map((upload) => <option key={`base-${upload.id}`} value={upload.upload_date} disabled={upload.upload_date >= targetCompareDate}>{formatDate(upload.upload_date)}</option>)}</select></label>
+              <GitCompareArrows className="comparison-arrow" size={22} aria-hidden="true" />
+              <label><span>Later snapshot</span><select value={targetCompareDate} onChange={(event) => selectTargetCompareDate(event.target.value)}>{[...uploadHistory].sort((a, b) => a.upload_date.localeCompare(b.upload_date)).map((upload) => <option key={`compare-${upload.id}`} value={upload.upload_date} disabled={upload.upload_date <= baseCompareDate}>{formatDate(upload.upload_date)}</option>)}</select></label>
+            </div>
+            <div className="confirm-actions"><button className="secondary-button" type="button" onClick={() => setIsComparePickerOpen(false)}>Cancel</button><button className="primary-button" type="button" onClick={handleCompareUploads} disabled={comparisonLoading || baseCompareDate === targetCompareDate}><GitCompareArrows size={16} aria-hidden="true" />{comparisonLoading ? "Comparing" : "Compare"}</button></div>
+          </section>
+        </div>
+      ) : null}
+
+      {comparison ? (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal comparison-modal" role="dialog" aria-modal="true" aria-labelledby="comparison-title">
+            <div className="modal-header"><div><h2 id="comparison-title">Export comparison</h2><p>{formatDate(comparison.base_upload.upload_date)} to {formatDate(comparison.compare_upload.upload_date)}</p></div><button className="icon-button close-button" type="button" onClick={() => setComparison(null)} title="Close"><X size={18} aria-hidden="true" /></button></div>
+            <div className="comparison-date-fields comparison-date-fields-inline">
+              <label><span>Earlier snapshot</span><select value={baseCompareDate} onChange={(event) => selectBaseCompareDate(event.target.value)}>{[...uploadHistory].sort((a, b) => a.upload_date.localeCompare(b.upload_date)).map((upload) => <option key={`result-base-${upload.id}`} value={upload.upload_date} disabled={upload.upload_date >= targetCompareDate}>{formatDate(upload.upload_date)}</option>)}</select></label>
+              <GitCompareArrows className="comparison-arrow" size={22} aria-hidden="true" />
+              <label><span>Later snapshot</span><select value={targetCompareDate} onChange={(event) => selectTargetCompareDate(event.target.value)}>{[...uploadHistory].sort((a, b) => a.upload_date.localeCompare(b.upload_date)).map((upload) => <option key={`result-compare-${upload.id}`} value={upload.upload_date} disabled={upload.upload_date <= baseCompareDate}>{formatDate(upload.upload_date)}</option>)}</select></label>
+              <button className="secondary-button comparison-refresh" type="button" onClick={handleCompareUploads} disabled={comparisonLoading || baseCompareDate === targetCompareDate}><RefreshCw size={16} aria-hidden="true" />{comparisonLoading ? "Updating" : "Update"}</button>
+            </div>
+            <div className="comparison-summary"><button type="button" className={comparisonTab === "base" ? "active" : ""} onClick={() => { setComparisonTab("base"); setComparisonSearch(""); }}><span>Earlier users</span><strong>{comparison.summary.base_total}</strong><small>View snapshot</small></button><button type="button" className={comparisonTab === "compare" ? "active" : ""} onClick={() => { setComparisonTab("compare"); setComparisonSearch(""); }}><span>Later users</span><strong>{comparison.summary.compare_total}</strong><small>View snapshot</small></button><button type="button" className={comparisonTab === "added" ? "active" : ""} onClick={() => { setComparisonTab("added"); setComparisonSearch(""); }}><span>Added</span><strong>{comparison.summary.added}</strong><small>View users</small></button><button type="button" className={comparisonTab === "removed" ? "active" : ""} onClick={() => { setComparisonTab("removed"); setComparisonSearch(""); }}><span>Removed</span><strong>{comparison.summary.removed}</strong><small>View users</small></button><button type="button" className={comparisonTab === "changed" ? "active" : ""} onClick={() => { setComparisonTab("changed"); setComparisonSearch(""); }}><span>Changed</span><strong>{comparison.summary.changed}</strong><small>View classifications</small></button></div>
+            {comparisonTab ? <><div className="comparison-list-toolbar"><label htmlFor="comparison-user-search">{comparisonTab === "changed" ? "Changed users" : `${comparisonTab} users`}</label><input id="comparison-user-search" type="search" placeholder="Search name, ID, username, or classification" value={comparisonSearch} onChange={(event) => setComparisonSearch(event.target.value)} /><strong>{filteredComparisonUsers.length} users</strong></div><div className="scroll-panel modal-scroll"><CompareUsersTable users={filteredComparisonUsers} type={comparisonTab} /></div></> : <div className="empty-state comparison-empty-state">Select a summary card to view its users.</div>}
           </section>
         </div>
       ) : null}
