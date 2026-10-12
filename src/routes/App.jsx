@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import cblIcon from "../assets/cbl_icon.png";
 import {
   Ban,
   CalendarDays,
@@ -670,8 +671,8 @@ function LoginScreen({ onLogin, loading, message }) {
   return (
     <main className="auth-shell">
       <section className="auth-card">
-        <div className="auth-mark">
-          <Database size={24} aria-hidden="true" />
+        <div className="auth-logo">
+          <img src={cblIcon} alt="CBL Group" />
         </div>
         <h1>SAP User Tracker</h1>
         <p>Sign in with your allowed company email.</p>
@@ -1214,7 +1215,9 @@ function App() {
       deletePendingUser ||
       isNewUsersOpen ||
       clearLoginsPending ||
-      isLogoutConfirmOpen;
+      isLogoutConfirmOpen ||
+      isComparePickerOpen ||
+      comparison;
     document.body.classList.toggle("modal-open", hasOpenModal);
 
     return () => {
@@ -1232,6 +1235,8 @@ function App() {
     clearLoginsPending,
     isLogoutConfirmOpen,
     isDeletedUsersOpen,
+    isComparePickerOpen,
+    comparison,
   ]);
 
   const loadAdminData = useCallback(async (tab) => {
@@ -1649,7 +1654,7 @@ function App() {
         <div className="topbar-inner">
           <div className="brand">
             <div className="brand-mark">
-              <Database size={22} aria-hidden="true" />
+              <img src={cblIcon} alt="CBL Group" />
             </div>
             <div>
               <h1>SAP User Tracker</h1>

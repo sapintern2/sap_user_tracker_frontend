@@ -1,2 +1,12 @@
 node_modules/
 dist/
+release/
+.env
+.env.*
+config.env
+*.db
+*.db-shm
+*.db-wal
+
+release-*/
+backend/*.exe
